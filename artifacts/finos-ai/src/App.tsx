@@ -2,30 +2,117 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster, toast } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Route, Switch, Router as WouterRouter, Link, useLocation, useRoute } from 'wouter';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, Bell, Bot, BriefcaseBusiness,
   Building2, Check, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Command, CreditCard,
   Database, Download, Ellipsis, FileBarChart2, FileText, Filter, Fingerprint, Gauge, Globe2,
   Headphones, LayoutDashboard, LifeBuoy, ListFilter, LogOut, Menu, MessageSquare, MoreHorizontal,
   PackageCheck, PanelLeftClose, PanelLeftOpen, PieChart, Plus, RefreshCw, Search, Send, Settings,
-  ShieldCheck, Sparkles, Target, TrendingUp, UserRound, Users, WalletCards, X, Zap
+  ShieldCheck, Sparkles, Target, TrendingUp, UserRound, Users, WalletCards, X, Zap,
+  ArrowUpDown, CheckCircle2, ClipboardList, Grid2X2, List, Pencil, Power, Trash2,
+  UserPlus, LineChart, CalendarDays, Clock4
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
 
 type Icon = typeof Activity;
-type Employee = { id: string; name: string; role: string; initials: string; color: string; accent: string; status: string; metric: string; metricLabel: string; description: string; tasks: string[]; };
+type Employee = {
+  id: string;
+  name: string;
+  role: string;
+  department: string;
+  initials: string;
+  color: string;
+  accent: string;
+  status: string;
+  active: boolean;
+  metric: string;
+  metricLabel: string;
+  description: string;
+  skills: string[];
+  performance: number;
+  lastActive: string;
+  tasks: string[];
+};
 
 const employees: Employee[] = [
-  { id:'ceo', name:'Atlas', role:'Chief Executive Officer', initials:'AT', color:'#93a9ff', accent:'#6d7bfa', status:'On watch', metric:'$18.4M', metricLabel:'volume under watch', description:'Connects signal across the whole operation and turns it into the next clear move.', tasks:['Review the morning operating brief','Resolve 3 cross-functional decisions','Prepare weekly board snapshot'] },
-  { id:'fraud', name:'Sentinel', role:'Fraud Intelligence', initials:'SN', color:'#ff8576', accent:'#e05d69', status:'Protecting', metric:'0.14%', metricLabel:'chargeback rate', description:'Catches unusual payment patterns before they become expensive customer stories.', tasks:['Review 24 high-confidence anomalies','Tune LATAM velocity rule','Escalate 2 merchant investigations'] },
-  { id:'finance', name:'Ledger', role:'Finance Operations', initials:'LG', color:'#4de0b4', accent:'#29a882', status:'Balancing', metric:'$2.8M', metricLabel:'reconciled today', description:'Keeps every dollar accounted for, forecasted, and ready to move.', tasks:['Reconcile yesterday’s settlements','Refresh cash runway forecast','Approve 7 payout exceptions'] },
-  { id:'support', name:'Relay', role:'Customer Support', initials:'RY', color:'#f6c76d', accent:'#d59b40', status:'Responding', metric:'94.8%', metricLabel:'intent confidence', description:'Gives every customer a fast, human-feeling answer with the right context attached.', tasks:['Resolve 41 payment questions','Flag 4 account health risks','Draft enterprise follow-up'] },
-  { id:'compliance', name:'Verity', role:'Compliance & Risk', initials:'VT', color:'#ce9eff', accent:'#9862d4', status:'Monitoring', metric:'98.7%', metricLabel:'controls coverage', description:'Makes the rules visible, explainable, and easier to operate at speed.', tasks:['Complete KYB review queue','Map new EU reporting control','Check policy attestations'] },
-  { id:'merchant-success', name:'Harbor', role:'Merchant Success', initials:'HB', color:'#5bd5ee', accent:'#2a9eb7', status:'Optimizing', metric:'+12.6%', metricLabel:'conversion lift found', description:'Finds the small changes that help merchants grow without adding complexity.', tasks:['Review 8 at-risk merchants','Recommend checkout test for Solace','Share QBR insight pack'] },
+  { id:'ceo', name:'Atlas', role:'Chief Executive Officer', department:'Executive', initials:'AT', color:'#93a9ff', accent:'#6d7bfa', status:'On watch', active:true, metric:'$18.4M', metricLabel:'volume under watch', description:'Connects signal across the whole operation and turns it into the next clear move.', skills:['Operating strategy','Decision briefs','Cross-team alignment'], performance:96, lastActive:'2 min ago', tasks:['Review the morning operating brief','Resolve 3 cross-functional decisions','Prepare weekly board snapshot'] },
+  { id:'fraud', name:'Sentinel', role:'Fraud Intelligence', department:'Risk & fraud', initials:'SN', color:'#ff8576', accent:'#e05d69', status:'Protecting', active:true, metric:'0.14%', metricLabel:'chargeback rate', description:'Catches unusual payment patterns before they become expensive customer stories.', skills:['Pattern detection','Rule tuning','Investigation triage'], performance:98, lastActive:'4 min ago', tasks:['Review 24 high-confidence anomalies','Tune LATAM velocity rule','Escalate 2 merchant investigations'] },
+  { id:'finance', name:'Ledger', role:'Finance Operations', department:'Finance', initials:'LG', color:'#4de0b4', accent:'#29a882', status:'Balancing', active:true, metric:'$2.8M', metricLabel:'reconciled today', description:'Keeps every dollar accounted for, forecasted, and ready to move.', skills:['Reconciliation','Cash forecasting','Payout operations'], performance:94, lastActive:'9 min ago', tasks:['Reconcile yesterday’s settlements','Refresh cash runway forecast','Approve 7 payout exceptions'] },
+  { id:'support', name:'Relay', role:'Customer Support', department:'Customer experience', initials:'RY', color:'#f6c76d', accent:'#d59b40', status:'Responding', active:true, metric:'94.8%', metricLabel:'intent confidence', description:'Gives every customer a fast, human-feeling answer with the right context attached.', skills:['Intent routing','Customer empathy','Escalation handling'], performance:93, lastActive:'12 min ago', tasks:['Resolve 41 payment questions','Flag 4 account health risks','Draft enterprise follow-up'] },
+  { id:'compliance', name:'Verity', role:'Compliance & Risk', department:'Risk & fraud', initials:'VT', color:'#ce9eff', accent:'#9862d4', status:'Monitoring', active:true, metric:'98.7%', metricLabel:'controls coverage', description:'Makes the rules visible, explainable, and easier to operate at speed.', skills:['KYB review','Policy mapping','Control monitoring'], performance:97, lastActive:'18 min ago', tasks:['Complete KYB review queue','Map new EU reporting control','Check policy attestations'] },
+  { id:'merchant-success', name:'Harbor', role:'Merchant Success', department:'Growth', initials:'HB', color:'#5bd5ee', accent:'#2a9eb7', status:'Optimizing', active:true, metric:'+12.6%', metricLabel:'conversion lift found', description:'Finds the small changes that help merchants grow without adding complexity.', skills:['Merchant health','Conversion strategy','QBR insights'], performance:95, lastActive:'26 min ago', tasks:['Review 8 at-risk merchants','Recommend checkout test for Solace','Share QBR insight pack'] },
 ];
+
+type EmployeeDraft = Pick<Employee, 'name' | 'role' | 'department' | 'description' | 'skills'>;
+type EmployeeContextValue = {
+  employees: Employee[];
+  addEmployee: (draft: EmployeeDraft) => void;
+  updateEmployee: (id: string, draft: EmployeeDraft) => void;
+  deleteEmployee: (id: string) => void;
+  toggleEmployee: (id: string) => void;
+};
+
+const EmployeesContext = createContext<EmployeeContextValue | null>(null);
+
+function EmployeesProvider({ children }: { children: ReactNode }) {
+  const [roster, setRoster] = useState<Employee[]>(() => {
+    try {
+      const stored = localStorage.getItem('finos-employees');
+      return stored ? JSON.parse(stored) as Employee[] : employees;
+    } catch {
+      return employees;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('finos-employees', JSON.stringify(roster));
+  }, [roster]);
+
+  const addEmployee = (draft: EmployeeDraft) => {
+    const initials = draft.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+    const accent = '#2a9eb7';
+    setRoster((current) => [...current, {
+      ...draft,
+      id: `${draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
+      initials,
+      color: '#5bd5ee',
+      accent,
+      status: 'Ready',
+      active: true,
+      metric: '—',
+      metricLabel: 'no activity yet',
+      performance: 0,
+      lastActive: 'Just now',
+      tasks: ['Complete onboarding checklist', 'Review assigned context', 'Prepare first operating brief'],
+    }]);
+  };
+
+  const updateEmployee = (id: string, draft: EmployeeDraft) => {
+    setRoster((current) => current.map((employee) => employee.id === id ? {
+      ...employee,
+      ...draft,
+      initials: draft.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+    } : employee));
+  };
+
+  const deleteEmployee = (id: string) => setRoster((current) => current.filter((employee) => employee.id !== id));
+  const toggleEmployee = (id: string) => setRoster((current) => current.map((employee) => employee.id === id ? {
+    ...employee,
+    active: !employee.active,
+    status: employee.active ? 'Paused' : 'Ready',
+  } : employee));
+
+  return <EmployeesContext.Provider value={{ employees: roster, addEmployee, updateEmployee, deleteEmployee, toggleEmployee }}>{children}</EmployeesContext.Provider>;
+}
+
+function useEmployees() {
+  const value = useContext(EmployeesContext);
+  if (!value) throw new Error('useEmployees must be used inside EmployeesProvider');
+  return value;
+}
 
 const navGroups = [
   { label:'Command center', items:[['/', 'Overview', LayoutDashboard], ['/ai-employees', 'AI employees', Bot]] },
@@ -90,6 +177,7 @@ function TinyBars({ color = '#58d5e6' }: { color?: string }) {
 }
 
 function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }) {
+  const { employees: roster } = useEmployees();
   const [location, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -98,7 +186,7 @@ function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }
   useEffect(() => { const onKey = (e:KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase()==='k') { e.preventDefault(); setCommandOpen(true); } if(e.key==='Escape') setCommandOpen(false); }; window.addEventListener('keydown',onKey); return()=>window.removeEventListener('keydown',onKey); },[]);
   const go = (path:string) => { setLocation(path); setMobileOpen(false); };
   const currentLabel = location === '/' ? 'Overview' : location.split('/').filter(Boolean).map(s=>s.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')).join(' / ');
-  const filteredCommands = [...navGroups.flatMap(g=>g.items.map(([path,label])=>({path:path as string,label:label as string}))), ...employees.map(e=>({path:`/ai-employees/${e.id}`,label:e.name}))].filter(x=>x.label.toLowerCase().includes(query.toLowerCase()));
+  const filteredCommands = [...navGroups.flatMap(g=>g.items.map(([path,label])=>({path:path as string,label:label as string}))), ...roster.map(e=>({path:`/ai-employees/${e.id}`,label:e.name}))].filter(x=>x.label.toLowerCase().includes(query.toLowerCase()));
   return <div className="noise app-shell flex">
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-[#172c40] bg-[#081522] transition-transform duration-200 md:translate-x-0 ${mobileOpen?'translate-x-0':'-translate-x-full'}`}>
       <div className="flex h-[73px] items-center border-b border-[#172c40] px-6"><Logo /></div>
@@ -110,7 +198,7 @@ function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }
       <nav className="scrollbar flex-1 overflow-y-auto px-3 py-5">
         {navGroups.map(group=><div key={group.label} className="mb-6"><div className="kicker mb-2 px-3">{group.label}</div>{group.items.map(([path,label,NavIcon])=><Link key={path as string} href={path as string} onClick={()=>setMobileOpen(false)} className={`nav-link mb-1 flex items-center gap-3 rounded-r-lg px-3 py-2.5 text-[13px] font-medium ${location===path?'active':''}`} data-testid={`link-nav-${(label as string).toLowerCase().replaceAll(' ','-')}`}><NavIcon size={16} strokeWidth={1.7}/><span>{label as string}</span>{path==='/ai-employees'&&<span className="ml-auto rounded-full bg-[#173b48] px-1.5 py-0.5 text-[9px] text-[#61d8e6]">6</span>}</Link>)}</div>)}
         <div className="mb-2 px-3 kicker">Your AI team</div>
-        {employees.map(e=><Link key={e.id} href={`/ai-employees/${e.id}`} onClick={()=>setMobileOpen(false)} className={`nav-link mb-1 flex items-center gap-3 rounded-r-lg px-3 py-2 text-[12px] ${location===`/ai-employees/${e.id}`?'active':''}`} data-testid={`link-employee-${e.id}`}><span className="grid h-6 w-6 place-items-center rounded-md text-[9px] font-bold" style={{background:`${e.accent}25`,color:e.color}}>{e.initials}</span><span className="truncate">{e.name}</span><span className="live-dot ml-auto h-1.5 w-1.5 rounded-full" style={{background:e.color}} /></Link>)}
+        {roster.map(e=><Link key={e.id} href={`/ai-employees/${e.id}`} onClick={()=>setMobileOpen(false)} className={`nav-link mb-1 flex items-center gap-3 rounded-r-lg px-3 py-2 text-[12px] ${location===`/ai-employees/${e.id}`?'active':''}`} data-testid={`link-employee-${e.id}`}><span className="grid h-6 w-6 place-items-center rounded-md text-[9px] font-bold" style={{background:`${e.accent}25`,color:e.color}}>{e.initials}</span><span className="truncate">{e.name}</span><span className={`live-dot ml-auto h-1.5 w-1.5 rounded-full ${e.active?'':'opacity-30'}`} style={{background:e.color}} /></Link>)}
       </nav>
       <div className="border-t border-[#172c40] p-3"><Link href="/settings" className={`nav-link flex items-center gap-3 rounded-r-lg px-3 py-2.5 text-[13px] ${location==='/settings'?'active':''}`} data-testid="link-settings"><Settings size={16}/><span>Settings</span></Link><button onClick={onLogout} className="nav-link mt-1 flex w-full items-center gap-3 rounded-r-lg px-3 py-2.5 text-[13px]" data-testid="button-logout"><LogOut size={16}/><span>Sign out</span></button></div>
     </aside>
@@ -156,16 +244,129 @@ function Dashboard() {
 
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:ReactNode}) { return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#020812]/75 px-4" onMouseDown={onClose}><div className="w-full max-w-[510px] rounded-2xl border border-[#31556a] bg-[#0c1b2c] p-6 shadow-2xl" onMouseDown={e=>e.stopPropagation()}><div className="mb-5 flex items-center justify-between"><h2 className="display-font text-lg font-semibold text-[#e7f3f6]">{title}</h2><button onClick={onClose} className="rounded-md p-1 text-[#7892a5] hover:bg-[#183247]" data-testid="button-close-modal"><X size={17}/></button></div>{children}</div></div>; }
 
+function EmployeeForm({ employee, onClose }: { employee?: Employee; onClose: () => void }) {
+  const { addEmployee, updateEmployee } = useEmployees();
+  const [draft, setDraft] = useState<EmployeeDraft>({
+    name: employee?.name || '',
+    role: employee?.role || '',
+    department: employee?.department || 'Operations',
+    description: employee?.description || '',
+    skills: employee?.skills || ['Context review', 'Decision support'],
+  });
+  const [skillText, setSkillText] = useState(employee?.skills.join(', ') || 'Context review, Decision support');
+  const [saving, setSaving] = useState(false);
+  const save = () => {
+    if (!draft.name.trim() || !draft.role.trim()) {
+      toast.error('Add a name and role before saving');
+      return;
+    }
+    setSaving(true);
+    const nextDraft = { ...draft, skills: skillText.split(',').map((skill) => skill.trim()).filter(Boolean) };
+    setTimeout(() => {
+      if (employee) updateEmployee(employee.id, nextDraft);
+      else addEmployee(nextDraft);
+      toast.success(employee ? `${draft.name} updated` : `${draft.name} added to the AI team`);
+      setSaving(false);
+      onClose();
+    }, 450);
+  };
+  return <Modal title={employee ? `Edit ${employee.name}` : 'Add AI employee'} onClose={onClose}>
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label><span className="kicker mb-2 block">Employee name</span><input autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="e.g. Scout" data-testid="input-employee-name"/></label>
+        <label><span className="kicker mb-2 block">Role</span><input value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="e.g. Revenue Intelligence" data-testid="input-employee-role"/></label>
+      </div>
+      <label><span className="kicker mb-2 block">Department</span><select value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value })} className="input-dark h-10 w-full rounded-lg px-3 text-sm" data-testid="select-employee-department"><option>Executive</option><option>Finance</option><option>Risk & fraud</option><option>Customer experience</option><option>Growth</option><option>Operations</option></select></label>
+      <label><span className="kicker mb-2 block">What they do</span><textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="input-dark min-h-[84px] w-full resize-none rounded-lg px-3 py-2 text-sm" placeholder="Describe the employee's responsibility..." data-testid="textarea-employee-description"/></label>
+      <label><span className="kicker mb-2 block">Skills <span className="normal-case tracking-normal text-[#536f84]">(comma separated)</span></span><input value={skillText} onChange={(e) => setSkillText(e.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="Forecasting, Triage, Reporting" data-testid="input-employee-skills"/></label>
+      <div className="flex justify-end gap-2 pt-2"><button onClick={onClose} className="btn-quiet rounded-lg px-4 py-2.5 text-xs" data-testid="button-cancel-employee">Cancel</button><button onClick={save} disabled={saving} className="btn-primary flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs" data-testid="button-save-employee">{saving && <RefreshCw size={13} className="animate-spin"/>}{saving ? 'Saving...' : employee ? 'Save changes' : 'Add employee'}</button></div>
+    </div>
+  </Modal>;
+}
+
 function AIDirectory() {
-  const [filter,setFilter]=useState('All'); const [search,setSearch]=useState('');
-  const shown=employees.filter(e=>(filter==='All'||e.status===filter)&&e.name.toLowerCase().includes(search.toLowerCase()));
-  return <div className="mx-auto max-w-[1250px]"><SectionHeader eyebrow="AI workforce / 06 active" title="Your AI employees." description="Specialists with context, judgment, and a clear lane of responsibility. Always on, never opaque." action={<button onClick={()=>toast.success('AI team sync complete')} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2 text-xs" data-testid="button-sync-ai"><RefreshCw size={14}/> Sync activity</button>}/><div className="mb-6 grid gap-3 md:grid-cols-3"><div className="panel flex items-center gap-3 p-4"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#17383f] text-[#58d5e6]"><Activity size={18}/></div><div><div className="text-lg font-semibold text-[#e5f2f4]">6 / 6</div><div className="text-[11px] text-[#7791a4]">employees active</div></div></div><div className="panel flex items-center gap-3 p-4"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#19392f] text-[#52d4b0]"><Zap size={18}/></div><div><div className="text-lg font-semibold text-[#e5f2f4]">127</div><div className="text-[11px] text-[#7791a4]">tasks completed today</div></div></div><div className="panel flex items-center gap-3 p-4"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#332741] text-[#ce9eff]"><Gauge size={18}/></div><div><div className="text-lg font-semibold text-[#e5f2f4]">96.8%</div><div className="text-[11px] text-[#7791a4]">confidence average</div></div></div></div><div className="mb-5 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 text-[#658197]" size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} className="input-dark h-10 w-full rounded-lg pl-9 pr-3 text-sm" placeholder="Search your AI team" data-testid="input-ai-search"/></div><div className="mobile-scroll flex gap-2">{['All','Protecting','Balancing','Responding','Monitoring','Optimizing'].map(x=><button key={x} onClick={()=>setFilter(x)} className={`rounded-lg border px-3 py-2 text-[11px] ${filter===x?'border-[#438da0] bg-[#153743] text-[#69dce8]':'border-[#203a4e] text-[#7892a5]'}`} data-testid={`button-filter-${x.toLowerCase()}`}>{x}</button>)}</div></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((e,i)=><Link key={e.id} href={`/ai-employees/${e.id}`} className={`panel fade-up delay-${(i%4)+1} group block p-5`} data-testid={`card-ai-${e.id}`}><div className="mb-5 flex items-start justify-between"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl text-[12px] font-bold" style={{background:`${e.accent}25`,color:e.color,border:`1px solid ${e.accent}55`}}>{e.initials}</div><div><div className="font-semibold text-[#e5f2f4]">{e.name}</div><div className="mt-0.5 text-[11px] text-[#7892a5]">{e.role}</div></div></div><span className="live-dot mt-1 h-2 w-2 rounded-full" style={{background:e.color}} /></div><p className="mb-5 min-h-[40px] text-[12px] leading-5 text-[#8ba1b2]">{e.description}</p><div className="signal-line mb-4"/><div className="flex items-end justify-between"><div><div className="display-font text-xl font-semibold" style={{color:e.color}}>{e.metric}</div><div className="mt-1 text-[10px] text-[#71899d]">{e.metricLabel}</div></div><div className="flex items-center gap-1 text-[11px] text-[#7290a3] group-hover:text-[#58d5e6]">Open workspace <ChevronRight size={13}/></div></div></Link>)}</div>{!shown.length&&<EmptyState title="No AI employees found" description="Try another name or activity status."/>}</div>;
+  const { employees: roster, deleteEmployee, toggleEmployee } = useEmployees();
+  const [filter, setFilter] = useState('All');
+  const [department, setDepartment] = useState('All departments');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('name');
+  const [view, setView] = useState<'cards' | 'table'>('cards');
+  const [editing, setEditing] = useState<Employee | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [menu, setMenu] = useState<string | null>(null);
+  const departments = ['All departments', ...Array.from(new Set(roster.map((employee) => employee.department)))];
+  const shown = useMemo(() => roster.filter((employee) => {
+    const matchesSearch = `${employee.name} ${employee.role} ${employee.department} ${employee.skills.join(' ')}`.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = filter === 'All' || (filter === 'Active' ? employee.active : filter === 'Paused' ? !employee.active : employee.status === filter);
+    const matchesDepartment = department === 'All departments' || employee.department === department;
+    return matchesSearch && matchesStatus && matchesDepartment;
+  }).sort((a, b) => sort === 'performance' ? b.performance - a.performance : sort === 'lastActive' ? a.lastActive.localeCompare(b.lastActive) : a.name.localeCompare(b.name)), [roster, search, filter, department, sort]);
+  const activeCount = roster.filter((employee) => employee.active).length;
+  const confirmDelete = (employee: Employee) => {
+    if (window.confirm(`Remove ${employee.name} from the AI team?`)) {
+      deleteEmployee(employee.id);
+      toast.success(`${employee.name} removed`);
+    }
+  };
+  return <div className="mx-auto max-w-[1320px]">
+    <SectionHeader eyebrow={`AI workforce / ${activeCount} active of ${roster.length}`} title="Your AI employees." description="Manage the digital team behind every signal. Give each employee a clear lane, measurable outcomes, and the right context to act." action={<div className="flex flex-wrap gap-2"><button onClick={() => toast.success('AI team activity is up to date')} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2 text-xs" data-testid="button-sync-ai"><RefreshCw size={14}/> Sync activity</button><button onClick={() => setAdding(true)} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2 text-xs" data-testid="button-add-employee"><UserPlus size={14}/> Add employee</button></div>}/>
+    <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="panel flex items-center gap-3 p-4"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#17383f] text-[#58d5e6]"><Activity size={18}/></div><div><div className="text-lg font-semibold text-[#e5f2f4]">{activeCount} / {roster.length}</div><div className="text-[11px] text-[#7791a4]">employees active</div></div></div>
+      <div className="panel flex items-center gap-3 p-4"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#19392f] text-[#52d4b0]"><ClipboardList size={18}/></div><div><div className="text-lg font-semibold text-[#e5f2f4]">{roster.length * 21 + 1}</div><div className="text-[11px] text-[#7791a4]">tasks completed today</div></div></div>
+      <div className="panel flex items-center gap-3 p-4"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#332741] text-[#ce9eff]"><Gauge size={18}/></div><div><div className="text-lg font-semibold text-[#e5f2f4]">{roster.length ? Math.round(roster.filter((employee) => employee.performance).reduce((sum, employee) => sum + employee.performance, 0) / roster.filter((employee) => employee.performance).length) : 0}%</div><div className="text-[11px] text-[#7791a4]">performance average</div></div></div>
+      <div className="panel flex items-center gap-3 p-4"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#2e253e] text-[#f6c76d]"><CalendarDays size={18}/></div><div><div className="text-lg font-semibold text-[#e5f2f4]">18</div><div className="text-[11px] text-[#7791a4]">reviews this week</div></div></div>
+    </div>
+    <div className="mb-5 panel p-3">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+        <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-2.5 text-[#658197]" size={16}/><input value={search} onChange={(e) => setSearch(e.target.value)} className="input-dark h-10 w-full rounded-lg pl-9 pr-3 text-sm" placeholder="Search by name, role, department or skill" data-testid="input-ai-search"/></div>
+        <div className="flex flex-wrap gap-2">
+          <select value={department} onChange={(e) => setDepartment(e.target.value)} className="input-dark h-10 rounded-lg px-3 text-[11px]" data-testid="select-employee-department-filter">{departments.map((item) => <option key={item}>{item}</option>)}</select>
+          <select value={filter} onChange={(e) => setFilter(e.target.value)} className="input-dark h-10 rounded-lg px-3 text-[11px]" data-testid="select-employee-status-filter"><option>All</option><option>Active</option><option>Paused</option><option>Protecting</option><option>Balancing</option><option>Responding</option><option>Monitoring</option><option>Optimizing</option></select>
+          <select value={sort} onChange={(e) => setSort(e.target.value)} className="input-dark h-10 rounded-lg px-3 text-[11px]" data-testid="select-employee-sort"><option value="name">Sort: Name</option><option value="performance">Sort: Performance</option><option value="lastActive">Sort: Last active</option></select>
+          <div className="flex rounded-lg border border-[#203a4e] p-1"><button onClick={() => setView('cards')} className={`rounded-md p-1.5 ${view === 'cards' ? 'bg-[#173743] text-[#69dce8]' : 'text-[#6f879d]'}`} aria-label="Card view" data-testid="button-view-cards"><Grid2X2 size={15}/></button><button onClick={() => setView('table')} className={`rounded-md p-1.5 ${view === 'table' ? 'bg-[#173743] text-[#69dce8]' : 'text-[#6f879d]'}`} aria-label="Table view" data-testid="button-view-table"><List size={15}/></button></div>
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-[#698398]"><ListFilter size={13}/><span>Showing {shown.length} of {roster.length} employees</span>{(search || department !== 'All departments' || filter !== 'All') && <button onClick={() => { setSearch(''); setDepartment('All departments'); setFilter('All'); }} className="text-[#58d5e6]" data-testid="button-clear-employee-filters">Clear filters</button>}</div>
+    </div>
+     {view === 'cards' ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shown.map((employee, index) => <div key={employee.id} className={`panel fade-up delay-${(index % 4) + 1} group p-5`} data-testid={`card-ai-${employee.id}`}><div className="mb-4 flex items-start justify-between"><Link href={`/ai-employees/${employee.id}`} className="flex min-w-0 items-center gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[12px] font-bold" style={{ background: `${employee.accent}25`, color: employee.color, border: `1px solid ${employee.accent}55` }}>{employee.initials}</div><div className="min-w-0"><div className="truncate font-semibold text-[#e5f2f4]">{employee.name}</div><div className="mt-0.5 truncate text-[11px] text-[#7892a5]">{employee.role}</div></div></Link><div className="relative"><button onClick={() => setMenu(menu === employee.id ? null : employee.id)} className="rounded-md p-1.5 text-[#678399] hover:bg-[#173449]" aria-label={`Actions for ${employee.name}`} data-testid={`button-employee-menu-${employee.id}`}><MoreHorizontal size={16}/></button>{menu === employee.id && <div className="absolute right-0 top-8 z-10 w-40 rounded-lg border border-[#2a4b61] bg-[#0d2031] p-1 shadow-xl"><Link href={`/ai-employees/${employee.id}`} className="flex items-center gap-2 rounded-md px-3 py-2 text-[11px] text-[#b8ccd7] hover:bg-[#173449]"><UserRound size={13}/> View profile</Link><button onClick={() => { setEditing(employee); setMenu(null); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] text-[#b8ccd7] hover:bg-[#173449]"><Pencil size={13}/> Edit employee</button><button onClick={() => { toggleEmployee(employee.id); setMenu(null); toast.success(`${employee.name} ${employee.active ? 'deactivated' : 'activated'}`); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] text-[#b8ccd7] hover:bg-[#173449]"><Power size={13}/> {employee.active ? 'Deactivate' : 'Activate'}</button><button onClick={() => { confirmDelete(employee); setMenu(null); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] text-[#ff9b90] hover:bg-[#3a202a]"><Trash2 size={13}/> Delete</button></div>}</div></div><Link href={`/ai-employees/${employee.id}`} className="block"><div className="mb-4 flex items-center gap-2 text-[10px]"><span className={`status-pill ${employee.active ? 'border-[#2f8c7b] bg-[#12352f] text-[#6fe0bd]' : 'border-[#52627b] bg-[#1b293b] text-[#9db2ca]'}`}>{employee.active ? employee.status : 'Paused'}</span><span className="text-[#657f93]">{employee.department}</span></div><p className="mb-5 min-h-[40px] text-[12px] leading-5 text-[#8ba1b2]">{employee.description}</p><div className="mb-4 flex flex-wrap gap-1.5">{employee.skills.slice(0, 3).map((skill) => <span key={skill} className="rounded-md bg-[#122a3a] px-2 py-1 text-[10px] text-[#85a5b5]">{skill}</span>)}</div><div className="signal-line mb-4"/><div className="flex items-end justify-between"><div><div className="display-font text-xl font-semibold" style={{ color: employee.color }}>{employee.metric}</div><div className="mt-1 text-[10px] text-[#71899d]">{employee.metricLabel}</div></div><div className="flex items-center gap-1 text-[11px] text-[#7290a3] group-hover:text-[#58d5e6]">Profile <ChevronRight size={13}/></div></div></Link></div>)}</div> : <div className="panel overflow-hidden"><div className="scrollbar overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.12em] text-[#668096]"><th className="px-5 py-3 font-medium">Employee</th><th className="px-3 py-3 font-medium">Department</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Performance</th><th className="px-3 py-3 font-medium">Last active</th><th className="px-5 py-3 text-right font-medium">Actions</th></tr></thead><tbody>{shown.map((employee) => <tr key={employee.id} className="table-row border-b border-[#142b3e] text-[12px]" data-testid={`row-employee-${employee.id}`}><td className="px-5 py-3.5"><Link href={`/ai-employees/${employee.id}`} className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg text-[10px] font-bold" style={{ background: `${employee.accent}25`, color: employee.color }}>{employee.initials}</span><span><span className="block font-medium text-[#dcebf0]">{employee.name}</span><span className="block text-[10px] text-[#71899d]">{employee.role}</span></span></Link></td><td className="px-3 py-3.5 text-[#91a9b7]">{employee.department}</td><td className="px-3 py-3.5"><span className={`status-pill ${employee.active ? 'border-[#2f8c7b] bg-[#12352f] text-[#6fe0bd]' : 'border-[#52627b] bg-[#1b293b] text-[#9db2ca]'}`}>{employee.active ? employee.status : 'Paused'}</span></td><td className="px-3 py-3.5"><div className="flex items-center gap-2"><div className="h-1.5 w-20 overflow-hidden rounded-full bg-[#173044]"><div className="h-full rounded-full bg-[#58d5e6]" style={{ width: `${employee.performance}%` }}/></div><span className="mono text-[10px] text-[#bad2dc]">{employee.performance}%</span></div></td><td className="px-3 py-3.5 text-[#7891a3]">{employee.lastActive}</td><td className="px-5 py-3.5 text-right"><button onClick={() => setEditing(employee)} className="rounded-md p-2 text-[#71899e] hover:bg-[#173449] hover:text-[#69dce8]" aria-label={`Edit ${employee.name}`} data-testid={`button-edit-employee-${employee.id}`}><Pencil size={14}/></button><button onClick={() => { toggleEmployee(employee.id); toast.success(`${employee.name} ${employee.active ? 'deactivated' : 'activated'}`); }} className="rounded-md p-2 text-[#71899e] hover:bg-[#173449] hover:text-[#69dce8]" aria-label={`Toggle ${employee.name}`} data-testid={`button-toggle-employee-${employee.id}`}><Power size={14}/></button></td></tr>)}</tbody></table></div>{!shown.length && <EmptyState title="No AI employees found" description="Try a different search, status or department." compact/>}</div>}
+    {!shown.length && view === 'cards' && <EmptyState title="No AI employees found" description="Try a different search, status or department."/>}
+    {(adding || editing) && <EmployeeForm employee={editing || undefined} onClose={() => { setAdding(false); setEditing(null); }}/>}
+  </div>;
 }
 
 function AIWorkspace({ employee }: { employee:Employee }) {
-  const [message,setMessage]=useState(''); const [sent,setSent]=useState<string[]>([]); const [activeTab,setActiveTab]=useState('Overview'); const [running,setRunning]=useState(false);
+  const { employees: roster, toggleEmployee } = useEmployees();
+  const liveEmployee = roster.find((item) => item.id === employee.id) || employee;
+  const [message,setMessage]=useState(''); const [sent,setSent]=useState<string[]>([]); const [activeTab,setActiveTab]=useState('Overview'); const [running,setRunning]=useState(false); const [editing,setEditing]=useState(false); const [taskFilter,setTaskFilter]=useState('Open'); const [completed,setCompleted]=useState<string[]>([]);
+  const [notifications,setNotifications]=useState(true);
+  const [taskHistory,setTaskHistory]=useState([{task:employee.tasks[0],status:'Completed',time:'Today, 09:14'},{task:employee.tasks[1],status:'Completed',time:'Today, 08:42'},{task:employee.tasks[2],status:'In progress',time:'Today, 07:58'}]);
+  const { name, role, department, initials, color, accent, status, active, metric, metricLabel, description, tasks, skills, performance, lastActive } = liveEmployee;
   const send=()=>{if(!message.trim())return;setSent([...sent,message]);setMessage('');toast.success(`${employee.name} received your instruction`);};
-  return <div className="mx-auto max-w-[1250px]"><div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div className="flex items-start gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl text-[14px] font-bold" style={{background:`${employee.accent}25`,color:employee.color,border:`1px solid ${employee.accent}66`}}>{employee.initials}</div><div><div className="kicker mb-2">AI employee / workspace</div><h1 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#edf7fa]">{employee.name}</h1><div className="mt-1 flex items-center gap-2 text-[12px] text-[#8299ab]"><span className="live-dot h-1.5 w-1.5 rounded-full" style={{background:employee.color}}/>{employee.role} <span className="text-[#3c566d]">•</span><span style={{color:employee.color}}>{employee.status}</span></div></div></div><button onClick={()=>{setRunning(true);setTimeout(()=>setRunning(false),900);toast.success(`${employee.name} is reviewing the latest context`)}} className="btn-primary flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs" data-testid="button-run-ai"><Sparkles size={14}/>{running?'Working...':'Ask for an update'}</button></div><div className="mb-6 flex gap-1 overflow-x-auto border-b border-[#1a3246]"><button className="border-b-2 border-[#58d5e6] px-4 py-3 text-[12px] font-semibold text-[#65d9e7]">Overview</button><button onClick={()=>setActiveTab('Activity')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Activity'?'border-[#58d5e6] text-[#65d9e7]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-activity-tab">Activity</button><button onClick={()=>setActiveTab('Playbooks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Playbooks'?'border-[#58d5e6] text-[#65d9e7]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-playbooks-tab">Playbooks</button></div>{activeTab!=='Overview'?<div className="panel p-6"><div className="kicker mb-2">{activeTab}</div><h2 className="display-font text-xl font-semibold text-[#e5f2f4]">{activeTab==='Activity'?'A clear trail of decisions.':'Reusable operating patterns.'}</h2><p className="mt-2 max-w-lg text-sm leading-6 text-[#8198aa]">{activeTab==='Activity'?`${employee.name} has completed 18 actions in the last 24 hours. Every recommendation is explainable and reviewable.`:'Build and save playbooks for repeatable work. This workspace currently has 4 active patterns.'}</p><div className="mt-6 grid gap-3 md:grid-cols-2">{['Morning context scan','Exception triage','Weekly operating summary','Escalation review'].map((x,i)=><div key={x} className="rounded-lg border border-[#203c50] bg-[#0b1928] p-4 text-sm text-[#b8cad5]"><div className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-md bg-[#173746] text-[10px] text-[#64d8e5]">{i+1}</span>{x}</div><div className="mt-2 text-[11px] text-[#718b9f]">Last run {i+2}h ago <span className="float-right text-[#52d4b0]">Healthy</span></div></div>)}</div></div>:<><div className="grid gap-4 md:grid-cols-3"><div className="panel p-5 md:col-span-2"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Current focus</div><div className="text-sm font-semibold text-[#dfedf1]">{employee.tasks[0]}</div></div><span className="status-pill border-[#2f8c7b] bg-[#12352f] text-[#6fe0bd]">In progress</span></div><div className="mb-5 h-2 overflow-hidden rounded-full bg-[#142c3e]"><div className="h-full rounded-full" style={{width:'72%',background:employee.color}}/></div><div className="flex justify-between text-[10px] text-[#718b9f]"><span>Context gathered</span><span style={{color:employee.color}}>72% confidence</span></div><div className="mt-6 rounded-lg border border-[#213c4e] bg-[#0a1827] p-4 text-[12px] leading-5 text-[#95aebe]"><span className="font-semibold" style={{color:employee.color}}>Observation:</span> {employee.name} sees a stable operating picture with one exception that may benefit from a human decision.</div></div><div className="panel p-5"><div className="kicker mb-1">Primary metric</div><div className="display-font mt-2 text-[30px] font-semibold" style={{color:employee.color}}>{employee.metric}</div><div className="mt-1 text-[11px] text-[#7891a4]">{employee.metricLabel}</div><div className="mt-6 h-16"><Sparkline values={[35,42,38,54,48,66,60,72,68,85,78,91]} color={employee.color} fill/></div><div className="mt-3 flex justify-between text-[10px] text-[#718b9f]"><span>7 days ago</span><span>Today</span></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><div className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Recommended next</div><div className="text-sm font-semibold text-[#deedf1]">Tasks in the queue</div></div><span className="rounded-full bg-[#173546] px-2 py-1 text-[10px] text-[#63d6e3]">{employee.tasks.length} open</span></div><div className="space-y-2">{employee.tasks.map((task,i)=><button key={task} onClick={()=>toast.info(`${employee.name} started: ${task}`)} className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-[#0b1928] px-3 py-3 text-left text-[12px] text-[#afc2ce] hover:border-[#2b5268] hover:bg-[#10283a]" data-testid={`button-task-${employee.id}-${i}`}><span className="grid h-6 w-6 place-items-center rounded-md border border-[#2b5268] text-[10px]" style={{color:employee.color}}>{i+1}</span><span className="flex-1">{task}</span><ChevronRight size={14} className="text-[#55758a]"/></button>)}</div></div><div className="panel flex min-h-[260px] flex-col p-5"><div className="mb-4 flex items-center gap-2"><MessageSquare size={15} style={{color:employee.color}}/><div className="kicker">Talk to {employee.name}</div></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I’m tracking the operation. What would you like me to look into?</p>{sent.slice(-2).map((m,i)=><p key={i} className="ml-5 rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{m}</p>)}{sent.length>0&&<p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I’ll add that to my current review and report back with evidence.</p>}</div><div className="mt-4 flex gap-2"><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} className="input-dark h-9 min-w-0 flex-1 rounded-lg px-3 text-[11px]" placeholder="Give an instruction..." data-testid={`input-message-${employee.id}`}/><button onClick={send} className="btn-primary grid h-9 w-9 place-items-center rounded-lg" data-testid={`button-send-${employee.id}`}><Send size={14}/></button></div></div></div></>}</div>;
+  return <div className="mx-auto max-w-[1320px]">
+    <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div className="flex items-start gap-4"><div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-[14px] font-bold" style={{background:`${accent}25`,color,border:`1px solid ${accent}66`}}>{initials}</div><div><div className="kicker mb-2">AI employee / profile</div><h1 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#edf7fa]">{name}</h1><div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[#8299ab]"><span className={`live-dot h-1.5 w-1.5 rounded-full ${active?'':'opacity-30'}`} style={{background:color}}/>{role} <span className="text-[#3c566d]">•</span><span style={{color}}>{active ? status : 'Paused'}</span><span className="text-[#3c566d]">•</span><span>{department}</span></div></div></div><div className="flex flex-wrap gap-2"><button onClick={() => setEditing(true)} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-edit-profile"><Pencil size={14}/> Edit profile</button><button onClick={() => { toggleEmployee(employee.id); toast.success(`${name} ${active ? 'deactivated' : 'activated'}`); }} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-toggle-profile"><Power size={14}/>{active ? 'Deactivate' : 'Activate'}</button><button onClick={()=>{setRunning(true);setTimeout(()=>setRunning(false),900);toast.success(`${name} is reviewing the latest context`)}} className="btn-primary flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-run-ai"><Sparkles size={14}/>{running?'Working...':'Ask for an update'}</button></div></div>
+    <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[#1a3246]"><button onClick={()=>setActiveTab('Overview')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Overview'?'border-[#58d5e6] font-semibold text-[#65d9e7]':'border-transparent text-[#7892a5]'}`}>Overview</button><button onClick={()=>setActiveTab('Tasks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Tasks'?'border-[#58d5e6] font-semibold text-[#65d9e7]':'border-transparent text-[#7892a5]'}`} data-testid="button-profile-tasks-tab">Tasks</button><button onClick={()=>setActiveTab('Activity')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Activity'?'border-[#58d5e6] font-semibold text-[#65d9e7]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-activity-tab">Activity</button><button onClick={()=>setActiveTab('Playbooks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Playbooks'?'border-[#58d5e6] font-semibold text-[#65d9e7]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-playbooks-tab">Playbooks</button></div>
+    {activeTab==='Playbooks' ? <div className="panel p-6"><div className="kicker mb-2">Playbooks</div><h2 className="display-font text-xl font-semibold text-[#e5f2f4]">Reusable operating patterns.</h2><p className="mt-2 max-w-lg text-sm leading-6 text-[#8198aa]">Build and save playbooks for repeatable work. Every run remains visible in the activity timeline.</p><div className="mt-6 grid gap-3 md:grid-cols-2">{['Morning context scan','Exception triage','Weekly operating summary','Escalation review'].map((item,i)=><button key={item} onClick={()=>toast.success(`${item} queued for ${name}`)} className="rounded-lg border border-[#203c50] bg-[#0b1928] p-4 text-left text-sm text-[#b8cad5] hover:border-[#35667b]" data-testid={`button-playbook-${i}`}><div className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-md bg-[#173746] text-[10px] text-[#64d8e5]">{i+1}</span>{item}</div><div className="mt-2 text-[11px] text-[#718b9f]">Last run {i+2}h ago <span className="float-right text-[#52d4b0]">Healthy</span></div></button>)}</div></div> :
+      activeTab==='Activity' ? <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]"><ActivityTimeline employee={liveEmployee}/><PerformancePanel employee={liveEmployee}/></div> :
+      activeTab==='Tasks' ? <TaskManager employee={liveEmployee} tasks={tasks} taskFilter={taskFilter} setTaskFilter={setTaskFilter} completed={completed} setCompleted={setCompleted} history={taskHistory} setHistory={setTaskHistory}/> :
+      <><div className="grid gap-4 md:grid-cols-3"><div className="panel p-5 md:col-span-2"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Current focus</div><div className="text-sm font-semibold text-[#dfedf1]">{tasks[0]}</div></div><span className="status-pill border-[#2f8c7b] bg-[#12352f] text-[#6fe0bd]">In progress</span></div><div className="mb-5 h-2 overflow-hidden rounded-full bg-[#142c3e]"><div className="h-full rounded-full" style={{width:'72%',background:color}}/></div><div className="flex justify-between text-[10px] text-[#718b9f]"><span>Context gathered</span><span style={{color}}>72% confidence</span></div><div className="mt-6 rounded-lg border border-[#213c4e] bg-[#0a1827] p-4 text-[12px] leading-5 text-[#95aebe]"><span className="font-semibold" style={{color}}>Observation:</span> {name} sees a stable operating picture with one exception that may benefit from a human decision.</div></div><div className="panel p-5"><div className="kicker mb-1">Primary metric</div><div className="display-font mt-2 text-[30px] font-semibold" style={{color}}>{metric}</div><div className="mt-1 text-[11px] text-[#7891a4]">{metricLabel}</div><div className="mt-6 h-16"><Sparkline values={[35,42,38,54,48,66,60,72,68,85,78,91]} color={color} fill/></div><div className="mt-3 flex justify-between text-[10px] text-[#718b9f]"><span>7 days ago</span><span>Today</span></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><TaskManager employee={liveEmployee} tasks={tasks} taskFilter="Open" setTaskFilter={setTaskFilter} completed={completed} setCompleted={setCompleted} history={taskHistory} setHistory={setTaskHistory}/><div className="panel flex min-h-[260px] flex-col p-5"><div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><MessageSquare size={15} style={{color}}/><div className="kicker">Talk to {name}</div></div><button onClick={()=>{setNotifications(!notifications);toast.info(`Notifications ${notifications?'muted':'enabled'}`)}} className={`rounded-md p-1.5 ${notifications?'text-[#58d5e6]':'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-employee-notifications"><Bell size={14}/></button></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I’m tracking the operation. What would you like me to look into?</p>{sent.slice(-2).map((m,i)=><p key={i} className="ml-5 rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{m}</p>)}{sent.length>0&&<p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I’ll add that to my current review and report back with evidence.</p>}</div><div className="mt-4 flex gap-2"><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} className="input-dark h-9 min-w-0 flex-1 rounded-lg px-3 text-[11px]" placeholder="Give an instruction..." data-testid={`input-message-${employee.id}`}/><button onClick={send} className="btn-primary grid h-9 w-9 place-items-center rounded-lg" data-testid={`button-send-${employee.id}`}><Send size={14}/></button></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[.9fr_1.1fr]"><PerformancePanel employee={liveEmployee}/><ActivityTimeline employee={liveEmployee}/></div></>}
+    {editing && <EmployeeForm employee={liveEmployee} onClose={() => setEditing(false)}/>}</div>;
+}
+
+function TaskManager({ employee, tasks, taskFilter, setTaskFilter, completed, setCompleted, history, setHistory }: { employee: Employee; tasks: string[]; taskFilter: string; setTaskFilter: (value: string) => void; completed: string[]; setCompleted: (value: string[]) => void; history: { task: string; status: string; time: string }[]; setHistory: (value: { task: string; status: string; time: string }[]) => void }) {
+  const [assigning, setAssigning] = useState(false);
+  const [newTask, setNewTask] = useState('');
+  const visible = taskFilter === 'Completed' ? history.filter((item) => item.status === 'Completed').map((item) => item.task) : tasks.filter((task) => !completed.includes(task));
+  const assign = () => { if (!newTask.trim()) return; setHistory([{ task: newTask, status: 'Assigned', time: 'Just now' }, ...history]); setNewTask(''); setAssigning(false); toast.success(`Task assigned to ${employee.name}`); };
+  return <div className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Task management</div><div className="text-sm font-semibold text-[#deedf1]">Queue and history</div></div><button onClick={() => setAssigning(true)} className="btn-quiet flex items-center gap-1.5 rounded-md px-2.5 py-2 text-[10px]" data-testid="button-assign-task"><Plus size={13}/> Assign task</button></div><div className="mb-4 flex gap-1 rounded-lg bg-[#091725] p-1"><button onClick={() => setTaskFilter('Open')} className={`flex-1 rounded-md py-1.5 text-[10px] ${taskFilter === 'Open' ? 'bg-[#1d4050] text-[#6ce0eb]' : 'text-[#6f899c]'}`}>Open ({tasks.length - completed.length})</button><button onClick={() => setTaskFilter('Completed')} className={`flex-1 rounded-md py-1.5 text-[10px] ${taskFilter === 'Completed' ? 'bg-[#1d4050] text-[#6ce0eb]' : 'text-[#6f899c]'}`}>History ({history.filter((item) => item.status === 'Completed').length})</button></div><div className="space-y-2">{visible.map((task, i) => <button key={task} onClick={() => { if (!completed.includes(task)) { setCompleted([...completed, task]); setHistory([{task, status:'Completed', time:'Just now'}, ...history]); toast.success(`${employee.name} completed a task`); } }} className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-[#0b1928] px-3 py-3 text-left text-[12px] text-[#afc2ce] hover:border-[#2b5268] hover:bg-[#10283a]" data-testid={`button-task-${employee.id}-${i}`}><span className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] ${taskFilter === 'Completed' ? 'border-[#2f8c7b] bg-[#12352f] text-[#6fe0bd]' : 'border-[#2b5268]'}`}><CheckCircle2 size={13}/></span><span className="flex-1">{task}</span><span className="text-[10px] text-[#6f899c]">{taskFilter === 'Completed' ? history.find((item) => item.task === task)?.time : 'Open'}</span></button>)}</div>{assigning && <div className="mt-4 flex gap-2"><input autoFocus value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && assign()} className="input-dark h-9 min-w-0 flex-1 rounded-lg px-3 text-[11px]" placeholder="Describe a task..." data-testid="input-new-task"/><button onClick={assign} className="btn-primary rounded-lg px-3 text-[11px]" data-testid="button-save-task">Assign</button></div>}</div>;
+}
+
+function PerformancePanel({ employee }: { employee: Employee }) {
+  return <div className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Performance</div><div className="text-sm font-semibold text-[#deedf1]">Outcome quality</div></div><LineChart size={16} style={{color: employee.color}}/></div><div className="flex items-end gap-5"><div className="relative grid h-24 w-24 shrink-0 place-items-center rounded-full" style={{background:`conic-gradient(${employee.color} 0 ${employee.performance}%, #173044 ${employee.performance}% 100%)`}}><div className="grid h-[74px] w-[74px] place-items-center rounded-full bg-[#0c1b2c]"><span className="display-font text-xl font-semibold text-[#e5f2f4]">{employee.performance}%</span></div></div><div className="flex-1 space-y-2 text-[11px] text-[#8198aa]"><div className="flex justify-between"><span>Tasks on time</span><b className="text-[#52d4b0]">98%</b></div><div className="flex justify-between"><span>Decision accuracy</span><b className="text-[#58d5e6]">{Math.max(employee.performance - 1, 0)}%</b></div><div className="flex justify-between"><span>Human escalations</span><b className="text-[#f6c76d]">4.2%</b></div></div></div><div className="mt-5 h-16"><Sparkline values={[42,48,46,60,56,68,66,75,72,86,84,employee.performance]} color={employee.color} fill/></div><div className="mt-2 flex justify-between text-[10px] text-[#687f92]"><span>Last 30 days</span><span>Today</span></div></div>;
+}
+
+function ActivityTimeline({ employee }: { employee: Employee }) {
+  const items = [{label:'Completed task review',time:'12 min ago',detail:'Delivered a concise operating recommendation.',color:'#52d4b0'},{label:'Updated operating context',time:'46 min ago',detail:'Added 14 new payment signals to the workspace.',color:employee.color},{label:'Escalated to Jordan Shaw',time:'2 hrs ago',detail:'Requested a decision on a high-confidence exception.',color:'#f6c76d'},{label:'Started morning scan',time:employee.lastActive,detail:'Reviewed workspace activity and connected data.',color:'#ce9eff'}];
+  return <div className="panel p-5"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Activity timeline</div><div className="text-sm font-semibold text-[#deedf1]">A visible trail of work</div></div><Clock4 size={16} className="text-[#668ba0]"/></div><div className="space-y-5">{items.map((item) => <div key={item.label} className="relative flex gap-3"><div className="relative mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full" style={{background:`${item.color}20`}}><span className="h-1.5 w-1.5 rounded-full" style={{background:item.color}}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[12px] font-medium text-[#d5e5eb]">{item.label}</span><span className="text-[10px] text-[#6e879b]">{item.time}</span></div><p className="mt-1 text-[11px] leading-5 text-[#7d96a7]">{item.detail}</p></div></div>)}</div></div>;
 }
 
 function DataPage({ kind }: { kind:'transactions'|'customers'|'merchants' }) {
@@ -201,7 +402,8 @@ function Login({onLogin}:{onLogin:()=>void}) {
 function EmptyState({title,description,compact=false}:{title:string;description:string;compact?:boolean}) { return <div className={`flex flex-col items-center justify-center text-center ${compact?'py-10':'py-20'}`}><div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-[#163347] text-[#58d5e6]"><Search size={18}/></div><div className="text-sm font-semibold text-[#cfe0e7]">{title}</div><div className="mt-1 text-[11px] text-[#71899d]">{description}</div></div>; }
 
 function AppRouter({onLogout}:{onLogout:()=>void}) {
-  return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/ai-employees" component={AIDirectory}/>{employees.map(e=><Route key={e.id} path={`/ai-employees/${e.id}`} component={()=> <AIWorkspace employee={e}/>}/>)}<Route path="/transactions" component={()=> <DataPage kind="transactions"/>}/><Route path="/customers" component={()=> <DataPage kind="customers"/>}/><Route path="/merchants" component={()=> <DataPage kind="merchants"/>}/><Route path="/reports" component={Reports}/><Route path="/analytics" component={Analytics}/><Route path="/settings" component={SettingsPage}/><Route component={NotFound}/></Switch></Shell>;
+  const { employees: roster } = useEmployees();
+  return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/ai-employees" component={AIDirectory}/>{roster.map((employee) => <Route key={employee.id} path={`/ai-employees/${employee.id}`} component={() => <AIWorkspace employee={employee}/>}/>)}<Route path="/transactions" component={()=> <DataPage kind="transactions"/>}/><Route path="/customers" component={()=> <DataPage kind="customers"/>}/><Route path="/merchants" component={()=> <DataPage kind="merchants"/>}/><Route path="/reports" component={Reports}/><Route path="/analytics" component={Analytics}/><Route path="/settings" component={SettingsPage}/><Route component={NotFound}/></Switch></Shell>;
 }
 
 function Root() {
@@ -209,7 +411,7 @@ function Root() {
   const [location,setLocation]=useLocation();
   useEffect(()=>{if(!authed&&location!=='/login')setLocation('/login');},[authed,location,setLocation]);
   if(!authed) return <Route path="/login"><Login onLogin={()=>{setAuthed(true);setLocation('/')}}/></Route>;
-  return <AppRouter onLogout={()=>{localStorage.removeItem('finos-auth');setAuthed(false);setLocation('/login')}}/>;
+  return <EmployeesProvider><AppRouter onLogout={()=>{localStorage.removeItem('finos-auth');setAuthed(false);setLocation('/login')}}/></EmployeesProvider>;
 }
 
 function App() {
