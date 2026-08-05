@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "FinOS AI"
+description = "A modern dark payment operations dashboard for FinOS AI, with executive insights, AI employee workspaces, transaction intelligence, merchant operations, customer management, reports, analytics, and settings."
+version = "1.0.0"
+id = "artifacts/finos-ai"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21630
+
+[services.development]
+run = "pnpm --filter @workspace/finos-ai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/finos-ai", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/finos-ai/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21630"
+BASE_PATH = "/"
