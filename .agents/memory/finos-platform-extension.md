@@ -20,3 +20,9 @@ Company onboarding should create one organization and its initial admin user tra
 **Why:** The current dashboard and PlatformProvider already depend on a persisted active tenant and tenant-scoped workspace state; onboarding must establish that same boundary without introducing a parallel company or session system.
 
 **How to apply:** Derive the company domain from the admin email, enforce organization uniqueness at the database boundary, and persist only the returned Company-compatible tenant plus admin profile into the existing keys before entering the current dashboard.
+
+Subscription access is organization-scoped through one subscription record and static plan rules; plans gate the shared employee roster rather than creating plan-specific employee models.
+
+**Why:** Basic and Premium are access entitlements over the same AI workforce, so duplicating employees would split identity, permissions, and future roster updates.
+
+**How to apply:** Resolve access from subscription status and plan, match Basic by stable employee key or role label, let Premium unlock the shared roster/departments/advanced access, and deny inactive or unknown plans.

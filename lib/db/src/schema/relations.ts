@@ -3,11 +3,13 @@ import { organizations } from "./organizations";
 import { users } from "./users";
 import { departments } from "./departments";
 import { employees } from "./employees";
+import { subscriptions } from "./subscriptions";
 
-export const organizationsRelations = relations(organizations, ({ many }) => ({
+export const organizationsRelations = relations(organizations, ({ many, one }) => ({
   users: many(users),
   departments: many(departments),
   employees: many(employees),
+  subscription: one(subscriptions),
 }));
 
 export const usersRelations = relations(users, ({ one }) => ({
@@ -40,4 +42,11 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
     relationName: "employee_manager",
   }),
   reports: many(employees, { relationName: "employee_manager" }),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [subscriptions.organizationId],
+    references: [organizations.id],
+  }),
 }));
