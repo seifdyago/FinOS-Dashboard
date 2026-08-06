@@ -1,0 +1,1 @@
+- [FinOS platform extension](finos-platform-extension.md) — extend the existing routed app and shared platform context; do not create parallel page, route, or state systems.

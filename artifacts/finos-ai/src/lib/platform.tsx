@@ -22,6 +22,8 @@ export type CustomerRecord = {
   health: 'Healthy' | 'Review' | 'At risk';
   lastActive: string;
   segment: 'Enterprise' | 'Growth' | 'Emerging';
+  notes: string[];
+  activity: { label: string; time: string }[];
 };
 
 export type MerchantRecord = {
@@ -61,11 +63,20 @@ export type WorkspaceUser = {
   timezone: string;
 };
 
+export type WorkspacePreferences = {
+  workspaceName: string;
+  operatingContext: string;
+  criticalAlerts: boolean;
+  weeklyDigest: boolean;
+};
+
 type PlatformContextValue = {
   theme: PlatformTheme;
   toggleTheme: () => void;
   user: WorkspaceUser;
   updateUser: (patch: Partial<WorkspaceUser>) => void;
+  preferences: WorkspacePreferences;
+  updatePreferences: (patch: Partial<WorkspacePreferences>) => void;
   notifications: PlatformNotification[];
   unreadNotifications: number;
   markNotificationRead: (id: string) => void;
@@ -75,10 +86,13 @@ type PlatformContextValue = {
   merchants: MerchantRecord[];
   reports: ReportRecord[];
   addTransaction: (record: Omit<TransactionRecord, 'id' | 'time'>) => void;
+  deleteTransaction: (id: string) => void;
   updateTransactionStatus: (id: string, status: TransactionRecord['status']) => void;
   addCustomer: (record: Omit<CustomerRecord, 'id' | 'lastActive'>) => void;
   updateCustomerHealth: (id: string, health: CustomerRecord['health']) => void;
+  updateCustomerNotes: (id: string, notes: string[]) => void;
   addMerchant: (record: Omit<MerchantRecord, 'id'>) => void;
+  deleteMerchant: (id: string) => void;
   updateMerchantHealth: (id: string, health: MerchantRecord['health']) => void;
   addReport: (record: Omit<ReportRecord, 'id' | 'date' | 'status'>) => void;
   deleteReport: (id: string) => void;
@@ -96,12 +110,12 @@ const initialTransactions: TransactionRecord[] = [
 ];
 
 const initialCustomers: CustomerRecord[] = [
-  { id: 'C-01284', name: 'Maya Chen', email: 'maya.chen@northstar.co', merchant: 'Northstar Market', value: 8420.3, health: 'Healthy', lastActive: '2 min ago', segment: 'Growth' },
-  { id: 'C-01283', name: 'Noah Williams', email: 'noah@solacestudio.com', merchant: 'Solace Studio', value: 2810, health: 'Healthy', lastActive: '14 min ago', segment: 'Emerging' },
-  { id: 'C-01282', name: 'Elena Rossi', email: 'elena@kitesupply.co', merchant: 'Kite Supply Co.', value: 16290.4, health: 'Review', lastActive: '31 min ago', segment: 'Enterprise' },
-  { id: 'C-01281', name: 'Liam Patel', email: 'liam@morrowhealth.io', merchant: 'Morrow Health', value: 420, health: 'Healthy', lastActive: '1 hr ago', segment: 'Emerging' },
-  { id: 'C-01280', name: 'Ava Morgan', email: 'ava@tideandtimber.com', merchant: 'Tide & Timber', value: 6224.9, health: 'Healthy', lastActive: '2 hrs ago', segment: 'Growth' },
-  { id: 'C-01279', name: 'Oliver Jones', email: 'oliver@orchardworks.com', merchant: 'Orchard Works', value: 22410, health: 'At risk', lastActive: '3 hrs ago', segment: 'Enterprise' },
+  { id: 'C-01284', name: 'Maya Chen', email: 'maya.chen@northstar.co', merchant: 'Northstar Market', value: 8420.3, health: 'Healthy', lastActive: '2 min ago', segment: 'Growth', notes: ['Prefers monthly settlement summaries.'], activity: [{ label: 'Completed payment', time: '2 min ago' }, { label: 'Viewed settlement summary', time: 'Yesterday' }] },
+  { id: 'C-01283', name: 'Noah Williams', email: 'noah@solacestudio.com', merchant: 'Solace Studio', value: 2810, health: 'Healthy', lastActive: '14 min ago', segment: 'Emerging', notes: [], activity: [{ label: 'Completed payment', time: '14 min ago' }] },
+  { id: 'C-01282', name: 'Elena Rossi', email: 'elena@kitesupply.co', merchant: 'Kite Supply Co.', value: 16290.4, health: 'Review', lastActive: '31 min ago', segment: 'Enterprise', notes: ['Review high-value payment pattern with Sentinel.'], activity: [{ label: 'Payment flagged for review', time: '31 min ago' }, { label: 'Account health changed to Review', time: 'Yesterday' }] },
+  { id: 'C-01281', name: 'Liam Patel', email: 'liam@morrowhealth.io', merchant: 'Morrow Health', value: 420, health: 'Healthy', lastActive: '1 hr ago', segment: 'Emerging', notes: [], activity: [{ label: 'Completed payment', time: '1 hr ago' }] },
+  { id: 'C-01280', name: 'Ava Morgan', email: 'ava@tideandtimber.com', merchant: 'Tide & Timber', value: 6224.9, health: 'Healthy', lastActive: '2 hrs ago', segment: 'Growth', notes: ['QBR follow-up due next month.'], activity: [{ label: 'Completed payment', time: '2 hrs ago' }] },
+  { id: 'C-01279', name: 'Oliver Jones', email: 'oliver@orchardworks.com', merchant: 'Orchard Works', value: 22410, health: 'At risk', lastActive: '3 hrs ago', segment: 'Enterprise', notes: ['Reach out about recent authorization decline rate.'], activity: [{ label: 'Account health changed to At risk', time: '3 hrs ago' }, { label: 'Payout reviewed', time: 'Yesterday' }] },
 ];
 
 const initialMerchants: MerchantRecord[] = [
@@ -125,6 +139,13 @@ const initialNotifications: PlatformNotification[] = [
   { id: 'N-3', title: 'Harbor found a conversion opportunity', detail: 'Solace Studio may benefit from a checkout experiment.', time: '1 hour ago', kind: 'info', read: true },
 ];
 
+const initialPreferences: WorkspacePreferences = {
+  workspaceName: 'Orbit Digital',
+  operatingContext: 'Orbit Digital is a global payments platform serving thoughtful commerce brands.',
+  criticalAlerts: true,
+  weeklyDigest: false,
+};
+
 function readStored<T>(key: string, fallback: T): T {
   try {
     const value = localStorage.getItem(key);
@@ -132,6 +153,14 @@ function readStored<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function normalizeCustomers(records: CustomerRecord[]): CustomerRecord[] {
+  return records.map((customer) => ({
+    ...customer,
+    notes: customer.notes || [],
+    activity: customer.activity || [{ label: 'Customer imported into workspace', time: 'Previously' }],
+  }));
 }
 
 const PlatformContext = createContext<PlatformContextValue | null>(null);
@@ -146,9 +175,10 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     title: 'Chief Operating Officer',
     timezone: 'Pacific Time (US & Canada)',
   }));
+  const [preferences, setPreferences] = useState(() => readStored('finos-preferences', initialPreferences));
   const [notifications, setNotifications] = useState(() => readStored('finos-notifications', initialNotifications));
   const [transactions, setTransactions] = useState(() => readStored('finos-transactions', initialTransactions));
-  const [customers, setCustomers] = useState(() => readStored('finos-customers', initialCustomers));
+  const [customers, setCustomers] = useState(() => normalizeCustomers(readStored('finos-customers', initialCustomers)));
   const [merchants, setMerchants] = useState(() => readStored('finos-merchants', initialMerchants));
   const [reports, setReports] = useState(() => readStored('finos-reports', initialReports));
 
@@ -157,6 +187,7 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('theme-light', theme === 'light');
   }, [theme]);
   useEffect(() => localStorage.setItem('finos-user', JSON.stringify(user)), [user]);
+  useEffect(() => localStorage.setItem('finos-preferences', JSON.stringify(preferences)), [preferences]);
   useEffect(() => localStorage.setItem('finos-notifications', JSON.stringify(notifications)), [notifications]);
   useEffect(() => localStorage.setItem('finos-transactions', JSON.stringify(transactions)), [transactions]);
   useEffect(() => localStorage.setItem('finos-customers', JSON.stringify(customers)), [customers]);
@@ -168,6 +199,8 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     toggleTheme: () => setTheme((current) => current === 'dark' ? 'light' : 'dark'),
     user,
     updateUser: (patch) => setUser((current) => ({ ...current, ...patch })),
+    preferences,
+    updatePreferences: (patch) => setPreferences((current) => ({ ...current, ...patch })),
     notifications,
     unreadNotifications: notifications.filter((notification) => !notification.read).length,
     markNotificationRead: (id) => setNotifications((current) => current.map((notification) => notification.id === id ? { ...notification, read: true } : notification)),
@@ -177,14 +210,17 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     merchants,
     reports,
     addTransaction: (record) => setTransactions((current) => [{ ...record, id: `TX-${84922 + current.length}`, time: 'Just now' }, ...current]),
+    deleteTransaction: (id) => setTransactions((current) => current.filter((transaction) => transaction.id !== id)),
     updateTransactionStatus: (id, status) => setTransactions((current) => current.map((transaction) => transaction.id === id ? { ...transaction, status } : transaction)),
-    addCustomer: (record) => setCustomers((current) => [{ ...record, id: `C-${1285 + current.length}`, lastActive: 'Just now' }, ...current]),
+    addCustomer: (record) => setCustomers((current) => [{ ...record, id: `C-${1285 + current.length}`, lastActive: 'Just now', notes: [], activity: [{ label: 'Customer added to workspace', time: 'Just now' }] }, ...current]),
     updateCustomerHealth: (id, health) => setCustomers((current) => current.map((customer) => customer.id === id ? { ...customer, health } : customer)),
+    updateCustomerNotes: (id, notes) => setCustomers((current) => current.map((customer) => customer.id === id ? { ...customer, notes } : customer)),
     addMerchant: (record) => setMerchants((current) => [{ ...record, id: `M-${1043 + current.length}` }, ...current]),
+    deleteMerchant: (id) => setMerchants((current) => current.filter((merchant) => merchant.id !== id)),
     updateMerchantHealth: (id, health) => setMerchants((current) => current.map((merchant) => merchant.id === id ? { ...merchant, health } : merchant)),
-    addReport: (record) => setReports((current) => [{ ...record, id: `R-${304 + current.length}`, date: 'Just now', status: 'Generating' }, ...current]),
+    addReport: (record) => setReports((current) => [{ ...record, id: `R-${304 + current.length}`, date: 'Just now', status: 'Ready' }, ...current]),
     deleteReport: (id) => setReports((current) => current.filter((report) => report.id !== id)),
-  }), [theme, user, notifications, transactions, customers, merchants, reports]);
+  }), [theme, user, preferences, notifications, transactions, customers, merchants, reports]);
 
   return <PlatformContext.Provider value={value}>{children}</PlatformContext.Provider>;
 }

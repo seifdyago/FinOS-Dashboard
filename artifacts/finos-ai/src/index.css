@@ -132,3 +132,39 @@ button { cursor: pointer; }
   .mobile-scroll { overflow-x:auto; white-space:nowrap; }
   .panel { border-radius:12px; }
 }
+
+.theme-light {
+  --background: 210 30% 96%;
+  --foreground: 215 28% 18%;
+  --border: 210 22% 82%;
+  --input: 0 0% 100%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 28% 18%;
+  --card-border: 210 22% 82%;
+  --sidebar: 213 32% 93%;
+  --sidebar-foreground: 215 22% 34%;
+  --sidebar-border: 210 22% 82%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 28% 18%;
+  --popover-border: 210 22% 82%;
+  --secondary: 210 24% 90%;
+  --secondary-foreground: 215 28% 25%;
+}
+
+.theme-light body,
+.theme-light .app-shell { background: #eef4f7; color: #1e3445; }
+.theme-light .app-shell { background: radial-gradient(circle at 80% -10%, rgba(26,100,127,.12), transparent 30%), #eef4f7; }
+.theme-light .panel { background: #ffffff; border-color: #d5e1e7; }
+.theme-light .panel:hover { border-color: #8ab7c4; }
+.theme-light .glass { background: rgba(255,255,255,.88); border-color: #d5e1e7; }
+.theme-light .input-dark { background: #ffffff; border-color: #c6d8e0; color: #1e3445; }
+.theme-light .btn-quiet { background: #e5eef2; border-color: #c5d9e1; color: #375469; }
+.theme-light header,
+.theme-light aside { background: #f7fafb; border-color: #d5e1e7; }
+.theme-light .text-\[\#edf7fa\],
+.theme-light .text-\[\#eaf5f8\],
+.theme-light .text-\[\#e5f2f4\],
+.theme-light .text-\[\#deedf1\],
+.theme-light .text-\[\#e2eff2\],
+.theme-light .text-\[\#e3f1f4\],
+.theme-light .text-\[\#dcebf0\] { color: #1e3445; }
