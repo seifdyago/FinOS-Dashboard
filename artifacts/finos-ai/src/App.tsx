@@ -14,6 +14,7 @@ import {
   UserPlus, LineChart, CalendarDays, Clock4
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
+import { PlatformProvider, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
 
 const queryClient = new QueryClient();
 
