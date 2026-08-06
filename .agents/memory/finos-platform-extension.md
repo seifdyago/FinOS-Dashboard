@@ -32,3 +32,9 @@ Knowledge documents are organization-owned records with an optional foreign key 
 **Why:** The database employee UUID is the canonical persisted identity, while `employee_key` is tenant-local frontend compatibility data; using both correctly prevents duplicate employee models and cross-tenant document links.
 
 **How to apply:** Filter every document read by `organization_id`, allow unassigned documents for the organization, allow assigned documents only to the matching employee scope, and reuse subscription `manage:knowledge` access for management checks.
+
+Company file uploads reuse `knowledge_documents` as metadata records; binary storage is deferred behind an optional `storage_key`, and uploader ownership uses the existing organization-scoped user.
+
+**Why:** The current project has no storage or multipart convention, so adding a second file table or storage runtime would duplicate the knowledge model and exceed the foundation-only scope.
+
+**How to apply:** Validate PDF, DOCX, CSV, XLS/XLSX, and text metadata at the repository boundary, require an active organization user and subscription for upload authorization, and keep every read/write organization-scoped.

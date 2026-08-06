@@ -14,11 +14,12 @@ export const organizationsRelations = relations(organizations, ({ many, one }) =
   subscription: one(subscriptions),
 }));
 
-export const usersRelations = relations(users, ({ one }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [users.organizationId],
     references: [organizations.id],
   }),
+  uploadedKnowledgeDocuments: many(knowledgeDocuments),
 }));
 
 export const departmentsRelations = relations(departments, ({ one, many }) => ({
@@ -55,6 +56,10 @@ export const knowledgeDocumentsRelations = relations(knowledgeDocuments, ({ one 
   employee: one(employees, {
     fields: [knowledgeDocuments.employeeId],
     references: [employees.id],
+  }),
+  uploadedBy: one(users, {
+    fields: [knowledgeDocuments.uploadedByUserId],
+    references: [users.id],
   }),
 }));
 
