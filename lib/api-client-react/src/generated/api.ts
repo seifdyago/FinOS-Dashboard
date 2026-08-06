@@ -29,7 +29,9 @@ import type {
   KnowledgeFileFinalizeInput,
   KnowledgeFileListResponse,
   KnowledgeFileUploadInput,
-  KnowledgeFileUploadUrlResponse
+  KnowledgeFileUploadUrlResponse,
+  PlatformAnalytics,
+  RecordActivityEventRequest
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -574,5 +576,155 @@ export const useDeleteKnowledgeFile = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getDeleteKnowledgeFileMutationOptions(options));
+    }
+
+export const getGetPlatformAnalyticsUrl = () => {
+
+
+
+
+  return `/api/platform-admin/analytics`
+}
+
+/**
+ * Returns cross-company analytics for an authorized platform owner.
+ * @summary Get platform owner analytics
+ */
+export const getPlatformAnalytics = async ( options?: Parameters<typeof customFetch>[1]): Promise<PlatformAnalytics> => {
+
+  return customFetch<PlatformAnalytics>(getGetPlatformAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformAnalyticsQueryKey = () => {
+    return [
+    `/api/platform-admin/analytics`
+    ] as const;
+    }
+
+
+export const getGetPlatformAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformAnalytics>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformAnalytics>>> = ({ signal }) => getPlatformAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformAnalytics>>>
+export type GetPlatformAnalyticsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get platform owner analytics
+ */
+
+export function useGetPlatformAnalytics<TData = Awaited<ReturnType<typeof getPlatformAnalytics>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRecordActivityEventUrl = () => {
+
+
+
+
+  return `/api/activity/events`
+}
+
+/**
+ * Records an organization-scoped activity event and optional usage metric.
+ * @summary Record a workspace activity event
+ */
+export const recordActivityEvent = async (recordActivityEventRequest: RecordActivityEventRequest, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRecordActivityEventUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recordActivityEventRequest)
+  }
+);}
+
+
+
+
+
+export const getRecordActivityEventMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordActivityEvent>>, TError,{data: BodyType<RecordActivityEventRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordActivityEvent>>, TError,{data: BodyType<RecordActivityEventRequest>}, TContext> => {
+
+const mutationKey = ['recordActivityEvent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordActivityEvent>>, {data: BodyType<RecordActivityEventRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordActivityEvent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordActivityEventMutationResult = NonNullable<Awaited<ReturnType<typeof recordActivityEvent>>>
+    export type RecordActivityEventMutationBody = BodyType<RecordActivityEventRequest>
+    export type RecordActivityEventMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Record a workspace activity event
+ */
+export const useRecordActivityEvent = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordActivityEvent>>, TError,{data: BodyType<RecordActivityEventRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordActivityEvent>>,
+        TError,
+        {data: BodyType<RecordActivityEventRequest>},
+        TContext
+      > => {
+      return useMutation(getRecordActivityEventMutationOptions(options));
     }
 

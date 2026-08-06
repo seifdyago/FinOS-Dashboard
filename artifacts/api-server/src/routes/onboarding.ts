@@ -7,6 +7,7 @@ import {
   CreateCompanyOnboardingResponse,
   CreateCompanyOnboardingBody,
 } from "@workspace/api-zod";
+import { recordActivityEvent } from "../lib/activity-service";
 
 const router: IRouter = Router();
 
@@ -19,6 +20,23 @@ router.post("/onboarding/companies", async (req, res): Promise<void> => {
 
   try {
     const result = await createCompanyOnboarding(parsed.data);
+    try {
+      await recordActivityEvent({
+        organizationId: result.organization.id,
+        userId: result.user.id,
+        eventType: "company_registered",
+        metadata: { industry: result.organization.industry, companySize: result.organization.companySize },
+      });
+      await recordActivityEvent({
+        organizationId: result.organization.id,
+        userId: result.user.id,
+        eventType: "subscription_activated",
+        metadata: { plan: "basic", priceCents: 100_000 },
+      });
+    } catch (telemetryError) {
+      req.log.warn({ error: telemetryError }, "Company onboarding telemetry could not be recorded");
+    }
+
     res.status(201).json(
       CreateCompanyOnboardingResponse.parse({
         organization: {

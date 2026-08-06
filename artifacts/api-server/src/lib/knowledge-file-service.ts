@@ -17,6 +17,7 @@ import {
 } from "./knowledge-document-access";
 import { privateObjectStorage } from "./private-object-storage";
 import { subscriptionRepository } from "./subscription-repository";
+import { recordActivityEvent, recordUsageMetric } from "./activity-service";
 import type { User } from "@workspace/db";
 
 export type KnowledgeFileListItem = {
@@ -99,7 +100,7 @@ export async function finalizeKnowledgeFile(
   if (!(await privateObjectStorage.objectExists(input.objectPath))) {
     throw new Error("Uploaded file was not found in private storage.");
   }
-  return knowledgeDocumentRepository.createFileMetadata({
+  const document = await knowledgeDocumentRepository.createFileMetadata({
     organizationId: user.organizationId,
     uploadedByUserId: user.id,
     originalFileName: input.originalFileName,
@@ -108,6 +109,27 @@ export async function finalizeKnowledgeFile(
     storageKey: input.objectPath,
     employeeKey: input.employeeKey,
   });
+  try {
+    await recordActivityEvent({
+      organizationId: user.organizationId,
+      userId: user.id,
+      eventType: "knowledge_file_uploaded",
+      metadata: { fileName: input.originalFileName, sizeBytes: input.sizeBytes },
+    });
+    await recordUsageMetric({
+      organizationId: user.organizationId,
+      metricType: "knowledge_files",
+      value: 1,
+    });
+    await recordUsageMetric({
+      organizationId: user.organizationId,
+      metricType: "storage_bytes",
+      value: input.sizeBytes,
+    });
+  } catch {
+    // Telemetry is additive and must not make a successful upload fail.
+  }
+  return document;
 }
 
 export async function listKnowledgeFiles(user: User): Promise<KnowledgeFileListItem[]> {
@@ -163,6 +185,28 @@ export async function deleteKnowledgeFile(user: User, documentId: string): Promi
 
   if (document.storageKey) await privateObjectStorage.deleteObject(document.storageKey);
   await db.delete(knowledgeDocuments).where(and(eq(knowledgeDocuments.organizationId, user.organizationId), eq(knowledgeDocuments.id, documentId)));
+  try {
+    await recordActivityEvent({
+      organizationId: user.organizationId,
+      userId: user.id,
+      eventType: "knowledge_file_deleted",
+      metadata: { documentId },
+    });
+    if (document.sizeBytes) {
+      await recordUsageMetric({
+        organizationId: user.organizationId,
+        metricType: "knowledge_files",
+        value: -1,
+      });
+      await recordUsageMetric({
+        organizationId: user.organizationId,
+        metricType: "storage_bytes",
+        value: -document.sizeBytes,
+      });
+    }
+  } catch {
+    // Telemetry is additive and must not make a successful delete fail.
+  }
 }
 
 export async function getKnowledgeFileDownloadUrl(user: User, documentId: string): Promise<string> {

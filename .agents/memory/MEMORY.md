@@ -1,1 +1,2 @@
 - [FinOS platform extension](finos-platform-extension.md) — extend the existing routed app and shared platform context; do not create parallel page, route, or state systems.
+- [Drizzle schema renames](drizzle-schema-renames.md) — non-interactive push cannot resolve rename prompts; preserve applied column names unless an explicit rename flow is available.

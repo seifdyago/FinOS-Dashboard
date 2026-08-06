@@ -5,6 +5,8 @@ import { departments } from "./departments";
 import { employees } from "./employees";
 import { subscriptions } from "./subscriptions";
 import { knowledgeDocuments } from "./knowledge-documents";
+import { activityEvents } from "./activity-events";
+import { usageMetrics } from "./usage-metrics";
 
 export const organizationsRelations = relations(organizations, ({ many, one }) => ({
   users: many(users),
@@ -12,6 +14,8 @@ export const organizationsRelations = relations(organizations, ({ many, one }) =
   employees: many(employees),
   knowledgeDocuments: many(knowledgeDocuments),
   subscription: one(subscriptions),
+  activityEvents: many(activityEvents),
+  usageMetrics: many(usageMetrics),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -20,6 +24,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [organizations.id],
   }),
   uploadedKnowledgeDocuments: many(knowledgeDocuments),
+  activityEvents: many(activityEvents),
 }));
 
 export const departmentsRelations = relations(departments, ({ one, many }) => ({
@@ -66,6 +71,24 @@ export const knowledgeDocumentsRelations = relations(knowledgeDocuments, ({ one 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
   organization: one(organizations, {
     fields: [subscriptions.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const activityEventsRelations = relations(activityEvents, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [activityEvents.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [activityEvents.userId],
+    references: [users.id],
+  }),
+}));
+
+export const usageMetricsRelations = relations(usageMetrics, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [usageMetrics.organizationId],
     references: [organizations.id],
   }),
 }));

@@ -101,7 +101,76 @@ export interface KnowledgeFileDownloadUrlResponse {
   download_url: string;
 }
 
+export interface PlatformAnalyticsSummary {
+  total_companies: number;
+  subscribed_companies: number;
+  basic_subscriptions: number;
+  premium_subscriptions: number;
+  monthly_expected_revenue_cents: number;
+  active_companies: number;
+  active_users: number;
+  total_employees: number;
+  total_knowledge_files: number;
+  total_storage_bytes: number;
+  total_ai_conversations: number;
+  total_ai_requests: number;
+  total_responses: number;
+  companies_registered_last_30_days: number;
+}
+
+export interface PlatformCompanyAnalytics {
+  id: string;
+  name: string;
+  registration_date: string;
+  subscription_plan: string;
+  subscription_status: string;
+  monthly_price_cents: number;
+  user_count: number;
+  employee_count: number;
+  ai_employee_count: number;
+  knowledge_file_count: number;
+  storage_bytes: number;
+  /** @nullable */
+  last_activity: string | null;
+  status: string;
+  ai_conversations: number;
+  ai_requests: number;
+  responses: number;
+}
+
+export type PlatformActivityEventMetadata = { [key: string]: unknown };
+
+export interface PlatformActivityEvent {
+  id: string;
+  organization_id: string;
+  /** @nullable */
+  user_id: string | null;
+  event_type: string;
+  metadata: PlatformActivityEventMetadata;
+  created_at: string;
+}
+
+export interface PlatformAnalytics {
+  summary: PlatformAnalyticsSummary;
+  companies: PlatformCompanyAnalytics[];
+  recent_activity: PlatformActivityEvent[];
+}
+
+export type RecordActivityEventRequestMetadata = { [key: string]: unknown };
+
+export interface RecordActivityEventRequest {
+  /** @minLength 1 */
+  event_type: string;
+  metadata: RecordActivityEventRequestMetadata;
+  /** @nullable */
+  usage_metric_type?: string | null;
+  /** @nullable */
+  usage_value?: number | null;
+}
+
 export type FinOSOrganizationIdParameter = string;
 
 export type FinOSUserEmailParameter = string;
+
+export type FinOSPlatformAdminEmailParameter = string;
 

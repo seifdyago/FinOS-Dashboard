@@ -1,0 +1,235 @@
+Step 10: Platform Admin Dashboard + Company Analytics Foundation
+
+I’ll first inspect the existing organization, subscription, user, employee, knowledge, and authentication layers before editing. I’ll add only the platform-owner administration layer: a secure owner account scope, organization analytics, subscription overview, usage tracking foundation, and company activity visibility—without changing company dashboards, employee models, payment duplication, or existing tenant behavior.
+
+The inspection confirms the platform already has organizations, users, employees, subscriptions, knowledge documents, and organization isolation. There is no platform-owner analytics layer yet. I’ll add a separate platform administration scope that can see all subscribed companies while keeping each company isolated from other companies inside their own workspace.
+
+No new company/user/employee tables will be created. The admin layer will reuse the existing organization, subscription, user, employee, and knowledge data.
+
+## Platform Owner Account
+
+Add a platform owner/admin identity that is separate from customer companies.
+
+The platform owner can:
+
+- View all registered companies.
+- View active subscriptions.
+- View subscription plans.
+- View company usage.
+- View company activity.
+- View employee counts.
+- View AI employee usage.
+- View knowledge/document usage.
+- View revenue analytics.
+
+The platform owner cannot accidentally become a user inside customer organizations.
+
+## Company Analytics
+
+Add organization-level analytics:
+
+For each company:
+
+- Company name.
+- Registration date.
+- Subscription plan.
+- Subscription status.
+- Number of users.
+- Number of employees.
+- Number of AI employees.
+- Number of uploaded knowledge files.
+- Last activity.
+- Active/inactive state.
+
+## Revenue Dashboard Foundation
+
+Add revenue visibility:
+
+Platform owner can see:
+
+- Total subscribed companies.
+- Basic subscriptions count.
+- Premium subscriptions count.
+- Monthly expected revenue.
+- Highest paying companies.
+- Growth tracking.
+
+No payment gateway integration yet.
+
+No payment provider duplication.
+
+This phase only prepares the analytics foundation.
+
+## Company Activity Tracking
+
+Add organization-scoped activity events:
+
+Examples:
+
+- User login.
+- File upload.
+- AI employee usage.
+- Knowledge update.
+- Employee creation.
+- Subscription activation.
+
+Every event stores:
+
+- Organization ID.
+- User ID when available.
+- Event type.
+- Timestamp.
+- Metadata.
+
+No customer data leakage between organizations.
+
+## AI Employee Usage Tracking Foundation
+
+Prepare tracking for:
+
+- Number of conversations.
+- Number of AI requests.
+- Response count.
+- Usage limits.
+
+This allows future plans like:
+
+Basic:
+- Limited AI usage.
+
+Premium:
+- Higher limits.
+
+Enterprise:
+- Custom limits.
+
+No changes to current AI employees.
+
+## Admin Dashboard
+
+Create platform dashboard:
+
+Sections:
+
+### Companies
+
+Shows:
+
+- All companies.
+- Subscription status.
+- Usage.
+- Activity.
+
+### Revenue
+
+Shows:
+
+- Monthly recurring revenue.
+- Subscription distribution.
+- Growth.
+
+### Usage
+
+Shows:
+
+- AI usage.
+- Storage usage.
+- Knowledge files.
+
+### System
+
+Shows:
+
+- Active users.
+- Active companies.
+- Errors/events.
+
+## Security Rules
+
+Platform admin access only.
+
+Customer companies:
+
+- Cannot see other companies.
+- Cannot access platform analytics.
+- Cannot view other organizations' data.
+
+Platform admin:
+
+- Can view all organizations.
+- Can view aggregated analytics.
+
+## Database Changes
+
+Add only required tables:
+
+### platform_admins
+
+Fields:
+
+- id
+- user_id
+- role
+- created_at
+
+### activity_events
+
+Fields:
+
+- id
+- organization_id
+- user_id
+- event_type
+- metadata
+- created_at
+
+### usage_metrics
+
+Fields:
+
+- id
+- organization_id
+- metric_type
+- value
+- created_at
+
+No duplicate:
+
+- employees
+- organizations
+- users
+- subscriptions
+
+## Verification
+
+After implementation verify:
+
+- Existing company dashboard still works.
+- Existing subscriptions still work.
+- Platform owner can see all companies.
+- Companies cannot see each other.
+- Analytics correctly count organizations.
+- Revenue calculations match subscriptions.
+- Activity isolation works.
+- No duplicate employee/company models exist.
+
+## Important Architecture Decision
+
+The platform becomes:
+
+Customer Company
+→ Own Users
+→ Own Employees
+→ Own AI Employees
+→ Own Knowledge/Data
+
+↓
+
+Platform Owner
+
+→ Sees analytics only  
+→ Manages subscriptions  
+→ Monitors usage  
+→ Does not duplicate company data
+
+This keeps the SaaS architecture ready for thousands of companies.

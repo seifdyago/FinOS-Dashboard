@@ -191,3 +191,85 @@ export const DeleteKnowledgeFileHeader = zod.object({
 export const DeleteKnowledgeFileResponse = zod.void()
 
 
+/**
+ * Returns cross-company analytics for an authorized platform owner.
+ * @summary Get platform owner analytics
+ */
+
+
+
+export const GetPlatformAnalyticsHeader = zod.object({
+  "x-finos-platform-admin-email": zod.string().min(1)
+})
+
+export const GetPlatformAnalyticsResponse = zod.object({
+  "summary": zod.object({
+  "total_companies": zod.number(),
+  "subscribed_companies": zod.number(),
+  "basic_subscriptions": zod.number(),
+  "premium_subscriptions": zod.number(),
+  "monthly_expected_revenue_cents": zod.number(),
+  "active_companies": zod.number(),
+  "active_users": zod.number(),
+  "total_employees": zod.number(),
+  "total_knowledge_files": zod.number(),
+  "total_storage_bytes": zod.number(),
+  "total_ai_conversations": zod.number(),
+  "total_ai_requests": zod.number(),
+  "total_responses": zod.number(),
+  "companies_registered_last_30_days": zod.number()
+}),
+  "companies": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "registration_date": zod.string(),
+  "subscription_plan": zod.string(),
+  "subscription_status": zod.string(),
+  "monthly_price_cents": zod.number(),
+  "user_count": zod.number(),
+  "employee_count": zod.number(),
+  "ai_employee_count": zod.number(),
+  "knowledge_file_count": zod.number(),
+  "storage_bytes": zod.number(),
+  "last_activity": zod.string().nullable(),
+  "status": zod.string(),
+  "ai_conversations": zod.number(),
+  "ai_requests": zod.number(),
+  "responses": zod.number()
+})),
+  "recent_activity": zod.array(zod.object({
+  "id": zod.string(),
+  "organization_id": zod.string(),
+  "user_id": zod.string().nullable(),
+  "event_type": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "created_at": zod.string()
+}))
+})
+
+
+/**
+ * Records an organization-scoped activity event and optional usage metric.
+ * @summary Record a workspace activity event
+ */
+
+
+
+export const RecordActivityEventHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+})
+
+
+
+
+export const RecordActivityEventBody = zod.object({
+  "event_type": zod.string().min(1),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "usage_metric_type": zod.string().nullish(),
+  "usage_value": zod.number().nullish()
+})
+
+export const RecordActivityEventResponse = zod.void()
+
+

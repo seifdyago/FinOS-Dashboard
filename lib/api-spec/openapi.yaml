@@ -14,6 +14,10 @@ tags:
     description: Company onboarding operations
   - name: knowledge
     description: Company knowledge file operations
+  - name: platform-admin
+    description: Platform-owner analytics operations
+  - name: activity
+    description: Organization activity and usage tracking
 paths:
   /healthz:
     get:
@@ -236,6 +240,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /platform-admin/analytics:
+    get:
+      operationId: getPlatformAnalytics
+      tags: [platform-admin]
+      summary: Get platform owner analytics
+      description: Returns cross-company analytics for an authorized platform owner.
+      parameters:
+        - $ref: "#/components/parameters/FinOSPlatformAdminEmail"
+      responses:
+        "200":
+          description: Platform analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformAnalytics"
+        "401":
+          description: Missing platform admin identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Platform admin access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Platform analytics unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /activity/events:
+    post:
+      operationId: recordActivityEvent
+      tags: [activity]
+      summary: Record a workspace activity event
+      description: Records an organization-scoped activity event and optional usage metric.
+      parameters:
+        - $ref: "#/components/parameters/FinOSOrganizationId"
+        - $ref: "#/components/parameters/FinOSUserEmail"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordActivityEventRequest"
+      responses:
+        "204":
+          description: Activity event recorded
+        "400":
+          description: Invalid activity event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Missing workspace identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Workspace access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     FinOSOrganizationId:
@@ -251,6 +324,13 @@ components:
       required: true
       schema:
         type: string
+    FinOSPlatformAdminEmail:
+      name: x-finos-platform-admin-email
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
   schemas:
     HealthStatus:
       type: object
@@ -444,4 +524,158 @@ components:
           type: string
       required:
         - download_url
+    PlatformAnalytics:
+      type: object
+      properties:
+        summary:
+          $ref: "#/components/schemas/PlatformAnalyticsSummary"
+        companies:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlatformCompanyAnalytics"
+        recent_activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlatformActivityEvent"
+      required:
+        - summary
+        - companies
+        - recent_activity
+    PlatformAnalyticsSummary:
+      type: object
+      properties:
+        total_companies:
+          type: number
+        subscribed_companies:
+          type: number
+        basic_subscriptions:
+          type: number
+        premium_subscriptions:
+          type: number
+        monthly_expected_revenue_cents:
+          type: number
+        active_companies:
+          type: number
+        active_users:
+          type: number
+        total_employees:
+          type: number
+        total_knowledge_files:
+          type: number
+        total_storage_bytes:
+          type: number
+        total_ai_conversations:
+          type: number
+        total_ai_requests:
+          type: number
+        total_responses:
+          type: number
+        companies_registered_last_30_days:
+          type: number
+      required:
+        - total_companies
+        - subscribed_companies
+        - basic_subscriptions
+        - premium_subscriptions
+        - monthly_expected_revenue_cents
+        - active_companies
+        - active_users
+        - total_employees
+        - total_knowledge_files
+        - total_storage_bytes
+        - total_ai_conversations
+        - total_ai_requests
+        - total_responses
+        - companies_registered_last_30_days
+    PlatformCompanyAnalytics:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        registration_date:
+          type: string
+        subscription_plan:
+          type: string
+        subscription_status:
+          type: string
+        monthly_price_cents:
+          type: number
+        user_count:
+          type: number
+        employee_count:
+          type: number
+        ai_employee_count:
+          type: number
+        knowledge_file_count:
+          type: number
+        storage_bytes:
+          type: number
+        last_activity:
+          type: ["string", "null"]
+        status:
+          type: string
+        ai_conversations:
+          type: number
+        ai_requests:
+          type: number
+        responses:
+          type: number
+      required:
+        - id
+        - name
+        - registration_date
+        - subscription_plan
+        - subscription_status
+        - monthly_price_cents
+        - user_count
+        - employee_count
+        - ai_employee_count
+        - knowledge_file_count
+        - storage_bytes
+        - last_activity
+        - status
+        - ai_conversations
+        - ai_requests
+        - responses
+    PlatformActivityEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        organization_id:
+          type: string
+        user_id:
+          type: ["string", "null"]
+        event_type:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+      required:
+        - id
+        - organization_id
+        - user_id
+        - event_type
+        - metadata
+        - created_at
+    RecordActivityEventRequest:
+      type: object
+      properties:
+        event_type:
+          type: string
+          minLength: 1
+        metadata:
+          type: object
+          additionalProperties: true
+        usage_metric_type:
+          type: ["string", "null"]
+        usage_value:
+          type: ["number", "null"]
+      required:
+        - event_type
+        - metadata
 

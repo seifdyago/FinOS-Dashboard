@@ -18,7 +18,7 @@ import NotFound from '@/pages/not-found';
 import { PlatformProvider, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
 import { employees } from '@/data/employees';
 import type { Employee } from '@/types/employee';
-import { createCompanyOnboarding } from '@workspace/api-client-react';
+import { createCompanyOnboarding, recordActivityEvent, useGetPlatformAnalytics, type RecordActivityEventRequest } from '@workspace/api-client-react';
 import {
   deleteKnowledgeFile,
   finalizeKnowledgeFile,
@@ -31,6 +31,21 @@ import {
 const queryClient = new QueryClient();
 
 type Icon = typeof Activity;
+
+function reportWorkspaceActivity(
+  organizationId: string,
+  userEmail: string,
+  event: RecordActivityEventRequest,
+): void {
+  void recordActivityEvent(event, {
+    headers: {
+      'x-finos-organization-id': organizationId,
+      'x-finos-user-email': userEmail,
+    },
+  }).catch(() => {
+    // Telemetry is additive and must not block customer workflows.
+  });
+}
 
 type EmployeeDraft = {
   name: string;
@@ -156,6 +171,7 @@ const navGroups = [
   { label:'Command center', items:[['/', 'Overview', LayoutDashboard], ['/ai-employees', 'AI employees', Bot], ['/assistant', 'AI assistant', MessageCircle]] },
   { label:'Money movement', items:[['/transactions', 'Transactions', ArrowUpRight], ['/customers', 'Customers', Users], ['/merchants', 'Merchants', Building2]] },
   { label:'Intelligence', items:[['/reports', 'Reports', FileBarChart2], ['/analytics', 'Analytics', BarChart3], ['/knowledge', 'Company knowledge', FileText]] },
+  { label:'Platform', items:[['/platform-admin', 'Platform admin', ShieldCheck]] },
 ];
 
 const transactions = [
@@ -312,6 +328,7 @@ function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:
 
 function EmployeeForm({ employee, onClose }: { employee?: Employee; onClose: () => void }) {
   const { employees, addEmployee, updateEmployee } = useEmployees();
+  const { tenant, user } = usePlatform();
   const [draft, setDraft] = useState<EmployeeDraft>({
     name: employee?.name || '',
     role: employee?.role || '',
@@ -345,7 +362,17 @@ function EmployeeForm({ employee, onClose }: { employee?: Employee; onClose: () 
     };
     setTimeout(() => {
       if (employee) updateEmployee(employee.id, nextDraft);
-      else addEmployee(nextDraft);
+      else {
+        addEmployee(nextDraft);
+        reportWorkspaceActivity(tenant.id, user.email, {
+          event_type: 'employee_created',
+          metadata: {
+            employeeName: nextDraft.name,
+            role: nextDraft.role,
+            department: nextDraft.department,
+          },
+        });
+      }
       toast.success(employee ? `${draft.name} updated` : `${draft.name} added to the AI team`);
       setSaving(false);
       onClose();
@@ -787,7 +814,7 @@ function NotificationsPage() {
 }
 
 function AssistantPage() {
-  const { transactions, customers, merchants, reports } = usePlatform();
+  const { tenant, user, transactions, customers, merchants, reports } = usePlatform();
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([{ role: 'assistant', text: 'I’m FinOS AI. Ask me about payments, customer health, merchant performance, or your latest reports.' }]);
   const answer = (question: string) => {
@@ -798,7 +825,18 @@ function AssistantPage() {
     if (normalized.includes('report')) return `You have ${reports.length} saved reports. The latest is “${reports[0]?.name || 'not available'}”.`;
     return 'I can summarize transactions, customer health, merchant growth, or your saved reports. Try asking “What needs review?” or “How are merchants doing?”';
   };
-  const send = () => { if (!message.trim()) return; const question = message.trim(); setMessages((current) => [...current, { role: 'user', text: question }, { role: 'assistant', text: answer(question) }]); setMessage(''); };
+  const send = () => {
+    if (!message.trim()) return;
+    const question = message.trim();
+    setMessages((current) => [...current, { role: 'user', text: question }, { role: 'assistant', text: answer(question) }]);
+    reportWorkspaceActivity(tenant.id, user.email, {
+      event_type: 'ai_employee_usage',
+      metadata: { surface: 'workspace_assistant', questionLength: question.length },
+      usage_metric_type: 'ai_requests',
+      usage_value: 1,
+    });
+    setMessage('');
+  };
   return <div className="mx-auto max-w-[1000px]"><SectionHeader eyebrow="Command center / AI" title="Ask FinOS anything." description="A workspace-aware assistant for fast operational answers, grounded in the mock financial data already in your workspace."/><div className="panel overflow-hidden"><div className="flex min-h-[420px] flex-col space-y-4 p-5 md:p-7">{messages.map((item, index) => <div key={index} className={`max-w-[80%] rounded-xl p-4 text-[13px] leading-6 ${item.role === 'user' ? 'ml-auto bg-[#183947] text-[#c8e1e6]' : 'bg-[#10283a] text-[#a9c0cb]'}`}><div className="kicker mb-1">{item.role === 'user' ? 'You' : 'FinOS AI'}</div>{item.text}</div>)}<div className="mt-auto flex flex-wrap gap-2 pt-4">{['What needs review?', 'How are customers doing?', 'Show merchant growth'].map((prompt) => <button key={prompt} onClick={() => { setMessage(prompt); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid={`button-prompt-${prompt.toLowerCase().replaceAll(' ', '-')}`}>{prompt}</button>)}</div></div><div className="flex gap-2 border-t border-[#1b3448] p-4"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-sm" placeholder="Ask about your operation..." data-testid="input-assistant-message"/><button onClick={send} className="btn-primary grid h-10 w-10 place-items-center rounded-lg" data-testid="button-send-assistant"><Send size={15}/></button></div></div></div>;
 }
 
@@ -838,7 +876,17 @@ function Login({ onLogin }: { onLogin: () => void }) {
     const tenant = tenantForIdentity(email, demo);
     setLoading(true);
     setTimeout(() => {
-      finishLogin(tenant);
+      finishLogin(tenant, demo ? undefined : {
+        name: `${tenant.name} Admin`,
+        email: email.trim().toLowerCase(),
+        role: 'Workspace admin',
+      });
+      if (!demo) {
+        reportWorkspaceActivity(tenant.id, email.trim().toLowerCase(), {
+          event_type: 'login',
+          metadata: { method: 'email' },
+        });
+      }
       toast.success(`Welcome to ${tenant.name}`);
       setLoading(false);
     }, 500);
@@ -1135,9 +1183,76 @@ function CompanyKnowledgePage() {
   </div>;
 }
 
+function formatPlatformCurrency(cents: number): string {
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+function formatPlatformBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function PlatformAdminPage() {
+  const { user } = usePlatform();
+  const adminEmail = user.email.trim().toLowerCase();
+  const analyticsQuery = useGetPlatformAnalytics({
+    request: {
+      headers: { 'x-finos-platform-admin-email': adminEmail },
+    },
+  });
+  const analytics = analyticsQuery.data;
+  const errorData = analyticsQuery.error as { data?: { error?: string }; message?: string } | null;
+  const errorMessage = errorData?.data?.error || errorData?.message || 'Platform analytics are unavailable.';
+
+  if (analyticsQuery.isLoading) {
+    return <div className="mx-auto max-w-[1450px]"><SectionHeader eyebrow="Platform owner" title="Loading platform analytics." description="Checking the platform owner scope and preparing the company portfolio."/><div className="panel flex min-h-[320px] items-center justify-center text-sm text-[#7892a5]"><RefreshCw size={16} className="mr-2 animate-spin text-[#58d5e6]"/> Loading aggregate metrics...</div></div>;
+  }
+
+  if (analyticsQuery.isError || !analytics) {
+    return <div className="mx-auto max-w-[920px]"><SectionHeader eyebrow="Platform owner" title="Platform analytics access required." description="This surface is separate from customer company workspaces and is available only to identities registered in the platform_admins allowlist."/><div className="panel border border-[#6d3840] bg-[#241923] p-6" role="alert"><div className="flex items-start gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#ff9b90]"/><div><div className="text-sm font-semibold text-[#ffe1dc]">Owner scope not authorized</div><div className="mt-2 text-[12px] leading-6 text-[#b98d91]">{errorMessage}</div><div className="mt-4 rounded-lg border border-[#55323c] bg-[#321f29] px-3 py-2 font-mono text-[11px] text-[#dba9a8]">identity: {adminEmail || 'missing'}</div></div></div></div></div>;
+  }
+
+  const { summary, companies, recent_activity: recentActivity } = analytics;
+  const activeCompanies = companies.filter((company) => company.status.toLowerCase() === 'active').length;
+  const activeSubscriptionRate = summary.total_companies ? Math.round((summary.subscribed_companies / summary.total_companies) * 100) : 0;
+
+  return <div className="mx-auto max-w-[1450px]">
+    <SectionHeader eyebrow="Platform owner / portfolio intelligence" title="The company network, in view." description="A read-only operating picture across every FinOS company, with subscriptions, usage, activity, and growth kept outside customer workspace scope." action={<button onClick={() => void analyticsQuery.refetch()} disabled={analyticsQuery.isFetching} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" data-testid="button-refresh-platform-analytics"><RefreshCw size={13} className={analyticsQuery.isFetching ? 'animate-spin' : ''}/> Refresh portfolio</button>}/>
+    <div className="mb-6 flex items-center gap-3 rounded-xl border border-[#25465d] bg-[#0c2130] px-4 py-3 text-[12px]"><span className="live-dot h-2 w-2 rounded-full bg-[#52d4b0]"/><span className="text-[#c3dbe3]">Platform scope verified</span><span className="text-[#718da1]">•</span><span className="text-[#7e9aad]">Analytics are aggregated from organization-owned records</span><span className="mono ml-auto hidden text-[10px] text-[#5f8194] md:block">{adminEmail}</span></div>
+    <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <MetricCard label="Subscribed companies" value={String(summary.subscribed_companies)} delta={`${activeSubscriptionRate}% of portfolio`} icon={Building2}/>
+      <MetricCard label="Monthly expected revenue" value={formatPlatformCurrency(summary.monthly_expected_revenue_cents)} delta={`${summary.basic_subscriptions} Basic · ${summary.premium_subscriptions} Premium`} icon={CircleDollarSign} color="#52d4b0"/>
+      <MetricCard label="Active users" value={summary.active_users.toLocaleString()} delta={`${activeCompanies} active companies`} icon={Users} color="#f2c66a"/>
+      <MetricCard label="Knowledge storage" value={formatPlatformBytes(summary.total_storage_bytes)} delta={`${summary.total_knowledge_files} uploaded files`} icon={Database} color="#cb9eeb"/>
+    </div>
+     <div className="mb-6 grid gap-4 lg:grid-cols-[1.35fr_.65fr]">
+      <div className="panel p-5 md:p-6">
+        <div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">Revenue foundation</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">Subscription mix</div><div className="mt-1 text-[11px] text-[#71899d]">Expected recurring revenue from active and trialing subscriptions.</div></div><CircleDollarSign size={18} className="text-[#52d4b0]"/></div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-[#214057] bg-[#0c2030] p-4"><div className="kicker mb-2">Basic</div><div className="display-font text-[24px] font-semibold text-[#e9f5f7]">{summary.basic_subscriptions}</div><div className="mt-1 text-[11px] text-[#7892a5]">{formatPlatformCurrency(summary.basic_subscriptions * 100_000)} / mo</div></div>
+          <div className="rounded-lg border border-[#214057] bg-[#0c2030] p-4"><div className="kicker mb-2">Premium</div><div className="display-font text-[24px] font-semibold text-[#e9f5f7]">{summary.premium_subscriptions}</div><div className="mt-1 text-[11px] text-[#7892a5]">{formatPlatformCurrency(summary.premium_subscriptions * 200_000)} / mo</div></div>
+          <div className="rounded-lg border border-[#214057] bg-[#0c2030] p-4"><div className="kicker mb-2">30-day growth</div><div className="display-font text-[24px] font-semibold text-[#e9f5f7]">{summary.companies_registered_last_30_days}</div><div className="mt-1 text-[11px] text-[#7892a5]">new companies</div></div>
+        </div>
+      </div>
+       <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">Usage foundation</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">AI workforce signals</div></div><Bot size={18} className="text-[#58d5e6]"/></div><div className="space-y-4"><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">Conversations</span><span className="mono text-[#d9e9ee]">{summary.total_ai_conversations.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#58d5e6]" style={{ width: `${Math.min(summary.total_ai_conversations ? 100 : 0, 100)}%` }}/></div></div><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">AI requests</span><span className="mono text-[#d9e9ee]">{summary.total_ai_requests.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#52d4b0]" style={{ width: `${Math.min(summary.total_ai_requests ? 100 : 0, 100)}%` }}/></div></div><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">Responses</span><span className="mono text-[#d9e9ee]">{summary.total_responses.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#cb9eeb]" style={{ width: `${Math.min(summary.total_responses ? 100 : 0, 100)}%` }}/></div></div></div></div>
+    </div>
+    <div className="panel mb-6 overflow-hidden"><div className="flex items-center justify-between border-b border-[#1b3448] px-5 py-4 md:px-6"><div><div className="text-sm font-semibold text-[#dcebf0]">Companies</div><div className="mt-1 text-[11px] text-[#71899d]">Subscription, workforce, knowledge, and activity visibility without entering any customer workspace.</div></div><span className="rounded-full border border-[#31556a] bg-[#102c3e] px-2.5 py-1 text-[10px] text-[#8dcbd4]">{companies.length} organizations</span></div><div className="overflow-x-auto"><table className="w-full min-w-[1120px] text-left"><thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">Company</th><th className="px-4 py-3 font-medium">Subscription</th><th className="px-4 py-3 font-medium">Users</th><th className="px-4 py-3 font-medium">AI employees</th><th className="px-4 py-3 font-medium">Knowledge</th><th className="px-4 py-3 font-medium">Last activity</th><th className="px-6 py-3 text-right font-medium">State</th></tr></thead><tbody>{companies.map((company) => <tr key={company.id} className="border-b border-[#162d40] last:border-0"><td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#173b48] text-[11px] font-bold text-[#75dbe5]">{company.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><div className="text-[12px] font-semibold text-[#dcebf0]">{company.name}</div><div className="mt-1 text-[10px] text-[#688399]">Registered {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(company.registration_date))}</div></div></div></td><td className="px-4 py-4"><div className="text-[12px] capitalize text-[#d4e3e8]">{company.subscription_plan}</div><div className="mt-1 text-[10px] text-[#71899d]">{company.subscription_status} · {formatPlatformCurrency(company.monthly_price_cents)}/mo</div></td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.user_count}</td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.ai_employee_count}</td><td className="px-4 py-4"><div className="text-[12px] text-[#b4c8d2]">{company.knowledge_file_count} files</div><div className="mt-1 text-[10px] text-[#71899d]">{formatPlatformBytes(company.storage_bytes)}</div></td><td className="px-4 py-4 text-[11px] text-[#8ca4b5]">{company.last_activity ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(company.last_activity)) : 'No activity yet'}</td><td className="px-6 py-4 text-right"><Status>{company.status === 'active' ? 'Healthy' : company.status}</Status></td></tr>)}</tbody></table></div></div>
+    <div className="grid gap-4 lg:grid-cols-[.85fr_1.15fr]">
+      <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">System</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">Platform footprint</div></div><Activity size={18} className="text-[#f2c66a]"/></div><div className="grid grid-cols-2 gap-3"><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Companies</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_companies}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Employees</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_employees}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Files</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_knowledge_files}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Events</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{recentActivity.length}</div></div></div></div>
+      <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">Company activity</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">Recent events</div></div><Clock4 size={18} className="text-[#58d5e6]"/></div>{recentActivity.length === 0 ? <EmptyState title="No activity recorded yet" description="Onboarding and knowledge lifecycle events will appear here." compact/> : <div className="space-y-3">{recentActivity.slice(0, 6).map((event) => { const company = companies.find((candidate) => candidate.id === event.organization_id); return <div key={event.id} className="flex items-center gap-3 border-b border-[#162d40] pb-3 last:border-0 last:pb-0"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#173b48] text-[#58d5e6]"><Activity size={13}/></div><div className="min-w-0 flex-1"><div className="truncate text-[12px] text-[#d7e7eb]">{event.event_type.replaceAll('_', ' ')}</div><div className="mt-1 text-[10px] text-[#71899d]">{company?.name || event.organization_id}</div></div><div className="shrink-0 text-[10px] text-[#7892a5]">{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(event.created_at))}</div></div>; })}</div>}</div>
+    </div>
+  </div>;
+}
+
 function AppRouter({onLogout}:{onLogout:()=>void}) {
   const { employees: roster } = useEmployees();
-  return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/ai-employees" component={AIDirectory}/><Route path="/ai-employees/builder" component={EmployeeBuilderPage}/>{roster.map((employee) => <Route key={`${employee.id}-details`} path={`/ai-employees/${employee.id}/details`} component={() => <EmployeeDetailsPage employee={employee}/>}/>)}{roster.map((employee) => <Route key={employee.id} path={`/ai-employees/${employee.id}`} component={() => <AIWorkspace employee={employee}/>}/>)}<Route path="/transactions" component={() => <DataPageV2 kind="transactions"/>}/><Route path="/customers" component={() => <DataPageV2 kind="customers"/>}/><Route path="/merchants" component={() => <DataPageV2 kind="merchants"/>}/><Route path="/reports" component={ReportsV2}/><Route path="/analytics" component={AnalyticsV2}/><Route path="/knowledge" component={CompanyKnowledgePage}/><Route path="/assistant" component={AssistantPage}/><Route path="/profile" component={ProfilePage}/><Route path="/notifications" component={NotificationsPage}/><Route path="/settings" component={SettingsV2}/><Route component={NotFound}/></Switch></Shell>;
+  return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/platform-admin" component={PlatformAdminPage}/><Route path="/ai-employees" component={AIDirectory}/><Route path="/ai-employees/builder" component={EmployeeBuilderPage}/>{roster.map((employee) => <Route key={`${employee.id}-details`} path={`/ai-employees/${employee.id}/details`} component={() => <EmployeeDetailsPage employee={employee}/>}/>)}{roster.map((employee) => <Route key={employee.id} path={`/ai-employees/${employee.id}`} component={() => <AIWorkspace employee={employee}/>}/>)}<Route path="/transactions" component={() => <DataPageV2 kind="transactions"/>}/><Route path="/customers" component={() => <DataPageV2 kind="customers"/>}/><Route path="/merchants" component={() => <DataPageV2 kind="merchants"/>}/><Route path="/reports" component={ReportsV2}/><Route path="/analytics" component={AnalyticsV2}/><Route path="/knowledge" component={CompanyKnowledgePage}/><Route path="/assistant" component={AssistantPage}/><Route path="/profile" component={ProfilePage}/><Route path="/notifications" component={NotificationsPage}/><Route path="/settings" component={SettingsV2}/><Route component={NotFound}/></Switch></Shell>;
 }
 
 function Root() {
