@@ -101,7 +101,7 @@ async function requireOrganizationUser(
   return user.id;
 }
 
-function inferKnowledgeFileType(fileName: string, mimeType: string): KnowledgeFileType {
+export function inferKnowledgeFileType(fileName: string, mimeType: string): KnowledgeFileType {
   const extension = fileName.toLowerCase().split(".").pop() || "";
   if (extension === "pdf" || mimeType === "application/pdf") return "pdf";
   if (
@@ -116,6 +116,19 @@ function inferKnowledgeFileType(fileName: string, mimeType: string): KnowledgeFi
   if (extension === "xls" || mimeType === "application/vnd.ms-excel") return "xls";
   if (extension === "txt" || mimeType === "text/plain") return "text";
   throw new Error("Unsupported knowledge file type. Supported types: PDF, DOCX, CSV, Excel, and text.");
+}
+
+export function validateKnowledgeFileMetadata(input: {
+  originalFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}): KnowledgeFileType {
+  requireValue(input.originalFileName, "originalFileName");
+  const mimeType = requireValue(input.mimeType, "mimeType").toLowerCase();
+  if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes <= 0) {
+    throw new Error("sizeBytes must be a positive integer.");
+  }
+  return inferKnowledgeFileType(input.originalFileName, mimeType);
 }
 
 export const knowledgeDocumentRepository: KnowledgeDocumentRepository = {
@@ -204,11 +217,11 @@ export const knowledgeDocumentRepository: KnowledgeDocumentRepository = {
     );
     const originalFileName = requireValue(input.originalFileName, "originalFileName");
     const mimeType = requireValue(input.mimeType, "mimeType").toLowerCase();
-    if (!Number.isInteger(input.sizeBytes) || input.sizeBytes < 0) {
-      throw new Error("sizeBytes must be a non-negative integer.");
-    }
-
-    const fileType = inferKnowledgeFileType(originalFileName, mimeType);
+    const fileType = validateKnowledgeFileMetadata({
+      originalFileName,
+      mimeType,
+      sizeBytes: input.sizeBytes,
+    });
     const employeeId = input.employeeKey
       ? await findEmployeeId(organizationId, input.employeeKey)
       : null;

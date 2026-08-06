@@ -47,3 +47,61 @@ export interface CompanyOnboardingResponse {
 export interface ApiError {
   error: string;
 }
+
+export interface KnowledgeFileUploadInput {
+  /** @minLength 1 */
+  original_file_name: string;
+  /** @minLength 1 */
+  mime_type: string;
+  /** @minimum 1 */
+  size_bytes: number;
+  /** @nullable */
+  employee_key?: string | null;
+}
+
+export interface KnowledgeFileFinalizeInput {
+  /** @minLength 1 */
+  original_file_name: string;
+  /** @minLength 1 */
+  mime_type: string;
+  /** @minimum 1 */
+  size_bytes: number;
+  /** @minLength 1 */
+  storage_key: string;
+  /** @nullable */
+  employee_key?: string | null;
+}
+
+export interface KnowledgeFileUploadUrlResponse {
+  upload_url: string;
+  storage_key: string;
+}
+
+export interface KnowledgeFile {
+  id: string;
+  original_file_name: string;
+  file_type: string;
+  mime_type: string;
+  size_bytes: number;
+  storage_key: string;
+  /** @nullable */
+  uploaded_by_user_id: string | null;
+  uploader_name: string;
+  created_at: string;
+  /** @nullable */
+  employee_id: string | null;
+  /** @nullable */
+  employee_name: string | null;
+  status: string;
+}
+
+export type KnowledgeFileListResponse = KnowledgeFile[];
+
+export interface KnowledgeFileDownloadUrlResponse {
+  download_url: string;
+}
+
+export type FinOSOrganizationIdParameter = string;
+
+export type FinOSUserEmailParameter = string;
+

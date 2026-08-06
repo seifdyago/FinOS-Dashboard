@@ -23,7 +23,13 @@ import type {
   ApiError,
   CompanyOnboardingResponse,
   CreateCompanyOnboardingRequest,
-  HealthStatus
+  HealthStatus,
+  KnowledgeFile,
+  KnowledgeFileDownloadUrlResponse,
+  KnowledgeFileFinalizeInput,
+  KnowledgeFileListResponse,
+  KnowledgeFileUploadInput,
+  KnowledgeFileUploadUrlResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -85,6 +91,8 @@ export const getHealthCheckQueryKey = () => {
     `/api/healthz`
     ] as const;
     }
+
+
 export const getHealthCheckQueryOptions = <TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
@@ -200,3 +208,371 @@ export const useCreateCompanyOnboarding = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getCreateCompanyOnboardingMutationOptions(options));
     }
+
+export const getRequestKnowledgeFileUploadUrlUrl = () => {
+
+
+
+
+  return `/api/knowledge/files/upload-url`
+}
+
+/**
+ * @summary Request a private knowledge file upload URL
+ */
+export const requestKnowledgeFileUploadUrl = async (knowledgeFileUploadInput: KnowledgeFileUploadInput, options?: Parameters<typeof customFetch>[1]): Promise<KnowledgeFileUploadUrlResponse> => {
+
+  return customFetch<KnowledgeFileUploadUrlResponse>(getRequestKnowledgeFileUploadUrlUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(knowledgeFileUploadInput)
+  }
+);}
+
+
+
+
+
+export const getRequestKnowledgeFileUploadUrlMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestKnowledgeFileUploadUrl>>, TError,{data: BodyType<KnowledgeFileUploadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestKnowledgeFileUploadUrl>>, TError,{data: BodyType<KnowledgeFileUploadInput>}, TContext> => {
+
+const mutationKey = ['requestKnowledgeFileUploadUrl'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestKnowledgeFileUploadUrl>>, {data: BodyType<KnowledgeFileUploadInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestKnowledgeFileUploadUrl(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestKnowledgeFileUploadUrlMutationResult = NonNullable<Awaited<ReturnType<typeof requestKnowledgeFileUploadUrl>>>
+    export type RequestKnowledgeFileUploadUrlMutationBody = BodyType<KnowledgeFileUploadInput>
+    export type RequestKnowledgeFileUploadUrlMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Request a private knowledge file upload URL
+ */
+export const useRequestKnowledgeFileUploadUrl = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestKnowledgeFileUploadUrl>>, TError,{data: BodyType<KnowledgeFileUploadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestKnowledgeFileUploadUrl>>,
+        TError,
+        {data: BodyType<KnowledgeFileUploadInput>},
+        TContext
+      > => {
+      return useMutation(getRequestKnowledgeFileUploadUrlMutationOptions(options));
+    }
+
+export const getListKnowledgeFilesUrl = () => {
+
+
+
+
+  return `/api/knowledge/files`
+}
+
+/**
+ * @summary List company knowledge files
+ */
+export const listKnowledgeFiles = async ( options?: Parameters<typeof customFetch>[1]): Promise<KnowledgeFileListResponse> => {
+
+  return customFetch<KnowledgeFileListResponse>(getListKnowledgeFilesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListKnowledgeFilesQueryKey = () => {
+    return [
+    `/api/knowledge/files`
+    ] as const;
+    }
+
+
+export const getListKnowledgeFilesQueryOptions = <TData = Awaited<ReturnType<typeof listKnowledgeFiles>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeFiles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListKnowledgeFilesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listKnowledgeFiles>>> = ({ signal }) => listKnowledgeFiles({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeFiles>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListKnowledgeFilesQueryResult = NonNullable<Awaited<ReturnType<typeof listKnowledgeFiles>>>
+export type ListKnowledgeFilesQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List company knowledge files
+ */
+
+export function useListKnowledgeFiles<TData = Awaited<ReturnType<typeof listKnowledgeFiles>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeFiles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListKnowledgeFilesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getFinalizeKnowledgeFileUrl = () => {
+
+
+
+
+  return `/api/knowledge/files/finalize`
+}
+
+/**
+ * @summary Save uploaded knowledge file metadata
+ */
+export const finalizeKnowledgeFile = async (knowledgeFileFinalizeInput: KnowledgeFileFinalizeInput, options?: Parameters<typeof customFetch>[1]): Promise<KnowledgeFile> => {
+
+  return customFetch<KnowledgeFile>(getFinalizeKnowledgeFileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(knowledgeFileFinalizeInput)
+  }
+);}
+
+
+
+
+
+export const getFinalizeKnowledgeFileMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof finalizeKnowledgeFile>>, TError,{data: BodyType<KnowledgeFileFinalizeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof finalizeKnowledgeFile>>, TError,{data: BodyType<KnowledgeFileFinalizeInput>}, TContext> => {
+
+const mutationKey = ['finalizeKnowledgeFile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof finalizeKnowledgeFile>>, {data: BodyType<KnowledgeFileFinalizeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  finalizeKnowledgeFile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FinalizeKnowledgeFileMutationResult = NonNullable<Awaited<ReturnType<typeof finalizeKnowledgeFile>>>
+    export type FinalizeKnowledgeFileMutationBody = BodyType<KnowledgeFileFinalizeInput>
+    export type FinalizeKnowledgeFileMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Save uploaded knowledge file metadata
+ */
+export const useFinalizeKnowledgeFile = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof finalizeKnowledgeFile>>, TError,{data: BodyType<KnowledgeFileFinalizeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof finalizeKnowledgeFile>>,
+        TError,
+        {data: BodyType<KnowledgeFileFinalizeInput>},
+        TContext
+      > => {
+      return useMutation(getFinalizeKnowledgeFileMutationOptions(options));
+    }
+
+export const getGetKnowledgeFileDownloadUrlUrl = (fileId: string,) => {
+
+
+
+
+  return `/api/knowledge/files/${fileId}/download-url`
+}
+
+/**
+ * @summary Get a private knowledge file download URL
+ */
+export const getKnowledgeFileDownloadUrl = async (fileId: string, options?: Parameters<typeof customFetch>[1]): Promise<KnowledgeFileDownloadUrlResponse> => {
+
+  return customFetch<KnowledgeFileDownloadUrlResponse>(getGetKnowledgeFileDownloadUrlUrl(fileId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKnowledgeFileDownloadUrlQueryKey = (fileId: string,) => {
+    return [
+    `/api/knowledge/files/${fileId}/download-url`
+    ] as const;
+    }
+
+
+export const getGetKnowledgeFileDownloadUrlQueryOptions = <TData = Awaited<ReturnType<typeof getKnowledgeFileDownloadUrl>>, TError = ErrorType<ApiError>>(fileId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeFileDownloadUrl>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKnowledgeFileDownloadUrlQueryKey(fileId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKnowledgeFileDownloadUrl>>> = ({ signal }) => getKnowledgeFileDownloadUrl(fileId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: fileId !== null && fileId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeFileDownloadUrl>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetKnowledgeFileDownloadUrlQueryResult = NonNullable<Awaited<ReturnType<typeof getKnowledgeFileDownloadUrl>>>
+export type GetKnowledgeFileDownloadUrlQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get a private knowledge file download URL
+ */
+
+export function useGetKnowledgeFileDownloadUrl<TData = Awaited<ReturnType<typeof getKnowledgeFileDownloadUrl>>, TError = ErrorType<ApiError>>(
+ fileId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeFileDownloadUrl>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetKnowledgeFileDownloadUrlQueryOptions(fileId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteKnowledgeFileUrl = (fileId: string,) => {
+
+
+
+
+  return `/api/knowledge/files/${fileId}`
+}
+
+/**
+ * @summary Delete a company knowledge file
+ */
+export const deleteKnowledgeFile = async (fileId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteKnowledgeFileUrl(fileId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteKnowledgeFileMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeFile>>, TError,{fileId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeFile>>, TError,{fileId: string}, TContext> => {
+
+const mutationKey = ['deleteKnowledgeFile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteKnowledgeFile>>, {fileId: string}> = (props) => {
+          const {fileId} = props ?? {};
+
+          return  deleteKnowledgeFile(fileId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteKnowledgeFileMutationResult = NonNullable<Awaited<ReturnType<typeof deleteKnowledgeFile>>>
+
+    export type DeleteKnowledgeFileMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Delete a company knowledge file
+ */
+export const useDeleteKnowledgeFile = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeFile>>, TError,{fileId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteKnowledgeFile>>,
+        TError,
+        {fileId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteKnowledgeFileMutationOptions(options));
+    }
+

@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: onboarding
     description: Company onboarding operations
+  - name: knowledge
+    description: Company knowledge file operations
 paths:
   /healthz:
     get:
@@ -57,7 +59,198 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /knowledge/files/upload-url:
+    post:
+      operationId: requestKnowledgeFileUploadUrl
+      tags: [knowledge]
+      summary: Request a private knowledge file upload URL
+      parameters:
+        - $ref: "#/components/parameters/FinOSOrganizationId"
+        - $ref: "#/components/parameters/FinOSUserEmail"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeFileUploadInput"
+      responses:
+        "200":
+          description: Private upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeFileUploadUrlResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Missing workspace identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Upload access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /knowledge/files:
+    get:
+      operationId: listKnowledgeFiles
+      tags: [knowledge]
+      summary: List company knowledge files
+      parameters:
+        - $ref: "#/components/parameters/FinOSOrganizationId"
+        - $ref: "#/components/parameters/FinOSUserEmail"
+      responses:
+        "200":
+          description: Organization-scoped knowledge files
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeFileListResponse"
+        "401":
+          description: Missing workspace identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Knowledge access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /knowledge/files/finalize:
+    post:
+      operationId: finalizeKnowledgeFile
+      tags: [knowledge]
+      summary: Save uploaded knowledge file metadata
+      parameters:
+        - $ref: "#/components/parameters/FinOSOrganizationId"
+        - $ref: "#/components/parameters/FinOSUserEmail"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeFileFinalizeInput"
+      responses:
+        "201":
+          description: Knowledge file metadata saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeFile"
+        "400":
+          description: Invalid request or missing object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Missing workspace identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Upload access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /knowledge/files/{fileId}/download-url:
+    get:
+      operationId: getKnowledgeFileDownloadUrl
+      tags: [knowledge]
+      summary: Get a private knowledge file download URL
+      parameters:
+        - $ref: "#/components/parameters/FinOSOrganizationId"
+        - $ref: "#/components/parameters/FinOSUserEmail"
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Private download URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeFileDownloadUrlResponse"
+        "401":
+          description: Missing workspace identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: File access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /knowledge/files/{fileId}:
+    delete:
+      operationId: deleteKnowledgeFile
+      tags: [knowledge]
+      summary: Delete a company knowledge file
+      parameters:
+        - $ref: "#/components/parameters/FinOSOrganizationId"
+        - $ref: "#/components/parameters/FinOSUserEmail"
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Knowledge file deleted
+        "401":
+          description: Missing workspace identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: File deletion denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
+  parameters:
+    FinOSOrganizationId:
+      name: x-finos-organization-id
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    FinOSUserEmail:
+      name: x-finos-user-email
+      in: header
+      required: true
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
@@ -150,4 +343,105 @@ components:
           type: string
       required:
         - error
+    KnowledgeFileUploadInput:
+      type: object
+      properties:
+        original_file_name:
+          type: string
+          minLength: 1
+        mime_type:
+          type: string
+          minLength: 1
+        size_bytes:
+          type: number
+          minimum: 1
+        employee_key:
+          type: ["string", "null"]
+      required:
+        - original_file_name
+        - mime_type
+        - size_bytes
+    KnowledgeFileFinalizeInput:
+      type: object
+      properties:
+        original_file_name:
+          type: string
+          minLength: 1
+        mime_type:
+          type: string
+          minLength: 1
+        size_bytes:
+          type: number
+          minimum: 1
+        storage_key:
+          type: string
+          minLength: 1
+        employee_key:
+          type: ["string", "null"]
+      required:
+        - original_file_name
+        - mime_type
+        - size_bytes
+        - storage_key
+    KnowledgeFileUploadUrlResponse:
+      type: object
+      properties:
+        upload_url:
+          type: string
+        storage_key:
+          type: string
+      required:
+        - upload_url
+        - storage_key
+    KnowledgeFile:
+      type: object
+      properties:
+        id:
+          type: string
+        original_file_name:
+          type: string
+        file_type:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: number
+        storage_key:
+          type: string
+        uploaded_by_user_id:
+          type: ["string", "null"]
+        uploader_name:
+          type: string
+        created_at:
+          type: string
+        employee_id:
+          type: ["string", "null"]
+        employee_name:
+          type: ["string", "null"]
+        status:
+          type: string
+      required:
+        - id
+        - original_file_name
+        - file_type
+        - mime_type
+        - size_bytes
+        - storage_key
+        - uploaded_by_user_id
+        - uploader_name
+        - created_at
+        - employee_id
+        - employee_name
+        - status
+    KnowledgeFileListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/KnowledgeFile"
+    KnowledgeFileDownloadUrlResponse:
+      type: object
+      properties:
+        download_url:
+          type: string
+      required:
+        - download_url
 

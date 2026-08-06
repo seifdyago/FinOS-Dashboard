@@ -12,13 +12,21 @@ import {
   ShieldCheck, Sparkles, Target, TrendingUp, UserRound, Users, WalletCards, X, Zap,
   ArrowUpDown, CheckCircle2, ClipboardList, Grid2X2, List, Pencil, Power, Trash2,
   UserPlus, LineChart, CalendarDays, Clock4, Moon, Sun, User, UserCog, SlidersHorizontal,
-  FileDown, MessageCircle, CheckCheck, CircleAlert
+  FileDown, MessageCircle, CheckCheck, CircleAlert, FileUp
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
 import { PlatformProvider, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
 import { employees } from '@/data/employees';
 import type { Employee } from '@/types/employee';
 import { createCompanyOnboarding } from '@workspace/api-client-react';
+import {
+  deleteKnowledgeFile,
+  finalizeKnowledgeFile,
+  getKnowledgeFileDownloadUrl,
+  listKnowledgeFiles,
+  requestKnowledgeFileUploadUrl,
+  type KnowledgeFile,
+} from '@workspace/api-client-react';
 
 const queryClient = new QueryClient();
 
@@ -147,7 +155,7 @@ const builderKnowledgeSources = ['Workspace context', 'Transaction history', 'Me
 const navGroups = [
   { label:'Command center', items:[['/', 'Overview', LayoutDashboard], ['/ai-employees', 'AI employees', Bot], ['/assistant', 'AI assistant', MessageCircle]] },
   { label:'Money movement', items:[['/transactions', 'Transactions', ArrowUpRight], ['/customers', 'Customers', Users], ['/merchants', 'Merchants', Building2]] },
-  { label:'Intelligence', items:[['/reports', 'Reports', FileBarChart2], ['/analytics', 'Analytics', BarChart3]] },
+  { label:'Intelligence', items:[['/reports', 'Reports', FileBarChart2], ['/analytics', 'Analytics', BarChart3], ['/knowledge', 'Company knowledge', FileText]] },
 ];
 
 const transactions = [
@@ -944,9 +952,192 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
 function EmptyState({title,description,compact=false}:{title:string;description:string;compact?:boolean}) { return <div className={`flex flex-col items-center justify-center text-center ${compact?'py-10':'py-20'}`}><div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-[#163347] text-[#58d5e6]"><Search size={18}/></div><div className="text-sm font-semibold text-[#cfe0e7]">{title}</div><div className="mt-1 text-[11px] text-[#71899d]">{description}</div></div>; }
 
+const KNOWLEDGE_FILE_ACCEPT = '.pdf,.docx,.xls,.xlsx,.csv,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain';
+
+function knowledgeMimeType(file: File): string {
+  if (file.type) return file.type;
+  const extension = file.name.toLowerCase().split('.').pop();
+  const mimeByExtension: Record<string, string> = {
+    pdf: 'application/pdf',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    csv: 'text/csv',
+    txt: 'text/plain',
+  };
+  return mimeByExtension[extension || ''] || 'application/octet-stream';
+}
+
+function formatKnowledgeFileSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function knowledgeErrorMessage(error: unknown): string {
+  const candidate = error as { data?: { error?: string }; message?: string };
+  return candidate.data?.error || candidate.message || 'Something went wrong. Please try again.';
+}
+
+function CompanyKnowledgePage() {
+  const { tenant, user } = usePlatform();
+  const { employees: roster } = useEmployees();
+  const [files, setFiles] = useState<KnowledgeFile[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const workspaceHeaders = useMemo(() => ({
+    'x-finos-organization-id': tenant.id,
+    'x-finos-user-email': user.email,
+  }), [tenant.id, user.email]);
+
+  const loadFiles = async () => {
+    setLoading(true);
+    try {
+      setError('');
+      const result = await listKnowledgeFiles({ headers: workspaceHeaders });
+      setFiles(result);
+    } catch (requestError) {
+      setError(knowledgeErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadFiles();
+  }, [tenant.id, user.email]);
+
+  const uploadFile = async (file: File) => {
+    const mimeType = knowledgeMimeType(file);
+    setUploading(true);
+    setError('');
+    try {
+      const upload = await requestKnowledgeFileUploadUrl({
+        original_file_name: file.name,
+        mime_type: mimeType,
+        size_bytes: file.size,
+        employee_key: selectedEmployee || null,
+      }, { headers: workspaceHeaders });
+      const storageResponse = await fetch(upload.upload_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': mimeType },
+        body: file,
+      });
+      if (!storageResponse.ok) {
+        throw new Error(`Private storage rejected the upload (${storageResponse.status}).`);
+      }
+      await finalizeKnowledgeFile({
+        original_file_name: file.name,
+        mime_type: mimeType,
+        size_bytes: file.size,
+        storage_key: upload.storage_key,
+        employee_key: selectedEmployee || null,
+      }, { headers: workspaceHeaders });
+      setSelectedEmployee('');
+      toast.success(`${file.name} added to company knowledge`);
+      await loadFiles();
+    } catch (requestError) {
+      const message = knowledgeErrorMessage(requestError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeFile = async (file: KnowledgeFile) => {
+    if (!window.confirm(`Delete ${file.original_file_name} from company knowledge?`)) return;
+    setDeletingId(file.id);
+    try {
+      await deleteKnowledgeFile(file.id, { headers: workspaceHeaders });
+      setFiles((current) => current.filter((candidate) => candidate.id !== file.id));
+      toast.success(`${file.original_file_name} deleted`);
+    } catch (requestError) {
+      const message = knowledgeErrorMessage(requestError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const downloadFile = async (file: KnowledgeFile) => {
+    try {
+      const result = await getKnowledgeFileDownloadUrl(file.id, { headers: workspaceHeaders });
+      window.open(result.download_url, '_blank', 'noopener,noreferrer');
+    } catch (requestError) {
+      const message = knowledgeErrorMessage(requestError);
+      setError(message);
+      toast.error(message);
+    }
+  };
+
+  return <div className="mx-auto max-w-[1180px]">
+    <SectionHeader
+      eyebrow={`Intelligence / ${tenant.name}`}
+      title="Company knowledge."
+      description="Keep the source material behind your AI workforce in one secure, company-owned workspace."
+      action={<label className={`btn-primary flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs ${uploading ? 'pointer-events-none opacity-60' : ''}`} data-testid="button-upload-knowledge">
+        {uploading ? <RefreshCw size={14} className="animate-spin"/> : <FileUp size={14}/>}
+        {uploading ? 'Uploading...' : 'Upload file'}
+        <input
+          type="file"
+          className="hidden"
+          accept={KNOWLEDGE_FILE_ACCEPT}
+          disabled={uploading}
+          data-testid="input-knowledge-file"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.currentTarget.value = '';
+            if (file) void uploadFile(file);
+          }}
+        />
+      </label>}
+    />
+    <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <MetricCard label="Company files" value={loading ? '—' : String(files.length)} delta="organization-scoped" icon={FileText} />
+      <MetricCard label="Storage status" value="Private" delta="signed access only" icon={ShieldCheck} color="#52d4b0" />
+      <MetricCard label="Accepted formats" value="06" delta="PDF · DOCX · Excel · CSV · TXT" icon={Database} color="#cb9eeb" />
+    </div>
+    <div className="mb-5 flex flex-col gap-3 rounded-xl border border-[#25465d] bg-[#0c2130] p-4 md:flex-row md:items-center">
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-[#dcebf0]">Link new files to an AI employee</div>
+        <div className="mt-1 text-[11px] leading-5 text-[#7892a5]">Optional. The selected employee will see this association when knowledge access is introduced.</div>
+      </div>
+      <select value={selectedEmployee} onChange={(event) => setSelectedEmployee(event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm md:w-[260px]" data-testid="select-knowledge-employee">
+        <option value="">No employee association</option>
+        {roster.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} · {employee.role}</option>)}
+      </select>
+    </div>
+    {error && <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#6d3840] bg-[#3b2028] px-4 py-3 text-[11px] leading-5 text-[#ffb4aa]" role="alert"><CircleAlert size={15} className="mt-0.5 shrink-0"/><span>{error}</span></div>}
+    <div className="panel overflow-hidden">
+      <div className="flex items-center justify-between border-b border-[#1b3448] px-5 py-4 md:px-6">
+        <div><div className="text-sm font-semibold text-[#dcebf0]">Uploaded files</div><div className="mt-1 text-[11px] text-[#71899d]">Only files belonging to {tenant.name} are shown.</div></div>
+        <button onClick={() => void loadFiles()} disabled={loading} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" data-testid="button-refresh-knowledge"><RefreshCw size={13} className={loading ? 'animate-spin' : ''}/> Refresh</button>
+      </div>
+      {loading ? <div className="px-6 py-14 text-center text-sm text-[#71899d]">Loading company knowledge...</div> : files.length === 0 ? <EmptyState title="No company files yet" description="Upload a PDF, DOCX, spreadsheet, CSV, or text file to start your company knowledge library." compact/> : <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left">
+          <thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">File</th><th className="px-4 py-3 font-medium">Uploader</th><th className="px-4 py-3 font-medium">Linked AI employee</th><th className="px-4 py-3 font-medium">Date</th><th className="px-4 py-3 font-medium">Status</th><th className="px-6 py-3 text-right font-medium">Actions</th></tr></thead>
+          <tbody>{files.map((file) => <tr key={file.id} className="border-b border-[#162d40] last:border-0">
+            <td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#173b48] text-[#58d5e6]"><FileText size={16}/></div><div className="min-w-0"><div className="truncate text-[12px] font-semibold text-[#dcebf0]">{file.original_file_name}</div><div className="mt-1 text-[10px] uppercase tracking-[.12em] text-[#6c879b]">{file.file_type} · {formatKnowledgeFileSize(file.size_bytes)}</div></div></div></td>
+            <td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{file.uploader_name}</td>
+            <td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{file.employee_name || <span className="text-[#607b90]">Workspace-wide</span>}</td>
+            <td className="px-4 py-4 text-[11px] text-[#8ca4b5]">{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(file.created_at))}</td>
+            <td className="px-4 py-4"><Status>{file.status}</Status></td>
+            <td className="px-6 py-4"><div className="flex justify-end gap-1"><button onClick={() => void downloadFile(file)} className="rounded-lg p-2 text-[#8ba1b4] hover:bg-[#173449] hover:text-[#58d5e6]" title="Download file" data-testid={`button-download-knowledge-${file.id}`}><Download size={15}/></button><button onClick={() => void removeFile(file)} disabled={deletingId === file.id} className="rounded-lg p-2 text-[#8ba1b4] hover:bg-[#3b2028] hover:text-[#ff9b90]" title="Delete file" data-testid={`button-delete-knowledge-${file.id}`}>{deletingId === file.id ? <RefreshCw size={15} className="animate-spin"/> : <Trash2 size={15}/>}</button></div></td>
+          </tr>)}</tbody>
+        </table>
+      </div>}
+    </div>
+  </div>;
+}
+
 function AppRouter({onLogout}:{onLogout:()=>void}) {
   const { employees: roster } = useEmployees();
-  return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/ai-employees" component={AIDirectory}/><Route path="/ai-employees/builder" component={EmployeeBuilderPage}/>{roster.map((employee) => <Route key={`${employee.id}-details`} path={`/ai-employees/${employee.id}/details`} component={() => <EmployeeDetailsPage employee={employee}/>}/>)}{roster.map((employee) => <Route key={employee.id} path={`/ai-employees/${employee.id}`} component={() => <AIWorkspace employee={employee}/>}/>)}<Route path="/transactions" component={() => <DataPageV2 kind="transactions"/>}/><Route path="/customers" component={() => <DataPageV2 kind="customers"/>}/><Route path="/merchants" component={() => <DataPageV2 kind="merchants"/>}/><Route path="/reports" component={ReportsV2}/><Route path="/analytics" component={AnalyticsV2}/><Route path="/assistant" component={AssistantPage}/><Route path="/profile" component={ProfilePage}/><Route path="/notifications" component={NotificationsPage}/><Route path="/settings" component={SettingsV2}/><Route component={NotFound}/></Switch></Shell>;
+  return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/ai-employees" component={AIDirectory}/><Route path="/ai-employees/builder" component={EmployeeBuilderPage}/>{roster.map((employee) => <Route key={`${employee.id}-details`} path={`/ai-employees/${employee.id}/details`} component={() => <EmployeeDetailsPage employee={employee}/>}/>)}{roster.map((employee) => <Route key={employee.id} path={`/ai-employees/${employee.id}`} component={() => <AIWorkspace employee={employee}/>}/>)}<Route path="/transactions" component={() => <DataPageV2 kind="transactions"/>}/><Route path="/customers" component={() => <DataPageV2 kind="customers"/>}/><Route path="/merchants" component={() => <DataPageV2 kind="merchants"/>}/><Route path="/reports" component={ReportsV2}/><Route path="/analytics" component={AnalyticsV2}/><Route path="/knowledge" component={CompanyKnowledgePage}/><Route path="/assistant" component={AssistantPage}/><Route path="/profile" component={ProfilePage}/><Route path="/notifications" component={NotificationsPage}/><Route path="/settings" component={SettingsV2}/><Route component={NotFound}/></Switch></Shell>;
 }
 
 function Root() {

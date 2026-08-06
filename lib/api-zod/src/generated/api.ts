@@ -15,6 +15,8 @@ import * as zod from 'zod';
 export const HealthCheckResponse = zod.object({
   "status": zod.string()
 })
+
+
 /**
  * Creates an organization and its initial admin user.
  * @summary Create a company workspace
@@ -51,3 +53,141 @@ export const CreateCompanyOnboardingResponse = zod.object({
   "status": zod.string()
 })
 })
+
+
+/**
+ * @summary Request a private knowledge file upload URL
+ */
+
+
+
+export const RequestKnowledgeFileUploadUrlHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+})
+
+
+
+
+
+
+export const RequestKnowledgeFileUploadUrlBody = zod.object({
+  "original_file_name": zod.string().min(1),
+  "mime_type": zod.string().min(1),
+  "size_bytes": zod.number().min(1),
+  "employee_key": zod.string().nullish()
+})
+
+export const RequestKnowledgeFileUploadUrlResponse = zod.object({
+  "upload_url": zod.string(),
+  "storage_key": zod.string()
+})
+
+
+/**
+ * @summary List company knowledge files
+ */
+
+
+
+export const ListKnowledgeFilesHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+})
+
+export const ListKnowledgeFilesResponseItem = zod.object({
+  "id": zod.string(),
+  "original_file_name": zod.string(),
+  "file_type": zod.string(),
+  "mime_type": zod.string(),
+  "size_bytes": zod.number(),
+  "storage_key": zod.string(),
+  "uploaded_by_user_id": zod.string().nullable(),
+  "uploader_name": zod.string(),
+  "created_at": zod.string(),
+  "employee_id": zod.string().nullable(),
+  "employee_name": zod.string().nullable(),
+  "status": zod.string()
+})
+export const ListKnowledgeFilesResponse = zod.array(ListKnowledgeFilesResponseItem)
+
+
+/**
+ * @summary Save uploaded knowledge file metadata
+ */
+
+
+
+export const FinalizeKnowledgeFileHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+})
+
+
+
+
+
+
+
+export const FinalizeKnowledgeFileBody = zod.object({
+  "original_file_name": zod.string().min(1),
+  "mime_type": zod.string().min(1),
+  "size_bytes": zod.number().min(1),
+  "storage_key": zod.string().min(1),
+  "employee_key": zod.string().nullish()
+})
+
+export const FinalizeKnowledgeFileResponse = zod.object({
+  "id": zod.string(),
+  "original_file_name": zod.string(),
+  "file_type": zod.string(),
+  "mime_type": zod.string(),
+  "size_bytes": zod.number(),
+  "storage_key": zod.string(),
+  "uploaded_by_user_id": zod.string().nullable(),
+  "uploader_name": zod.string(),
+  "created_at": zod.string(),
+  "employee_id": zod.string().nullable(),
+  "employee_name": zod.string().nullable(),
+  "status": zod.string()
+})
+
+
+/**
+ * @summary Get a private knowledge file download URL
+ */
+export const GetKnowledgeFileDownloadUrlParams = zod.object({
+  "fileId": zod.coerce.string()
+})
+
+
+
+
+export const GetKnowledgeFileDownloadUrlHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+})
+
+export const GetKnowledgeFileDownloadUrlResponse = zod.object({
+  "download_url": zod.string()
+})
+
+
+/**
+ * @summary Delete a company knowledge file
+ */
+export const DeleteKnowledgeFileParams = zod.object({
+  "fileId": zod.coerce.string()
+})
+
+
+
+
+export const DeleteKnowledgeFileHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+})
+
+export const DeleteKnowledgeFileResponse = zod.void()
+
+

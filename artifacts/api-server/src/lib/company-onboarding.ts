@@ -1,4 +1,4 @@
-import { db, organizations, users, type Organization, type User } from "@workspace/db";
+import { db, organizations, subscriptions, users, type Organization, type User } from "@workspace/db";
 import { CreateCompanyOnboardingBody } from "@workspace/api-zod";
 import { randomUUID } from "node:crypto";
 
@@ -100,6 +100,13 @@ export async function createCompanyOnboarding(
           status: "active",
         })
         .returning();
+
+      await transaction.insert(subscriptions).values({
+        organizationId: organization.id,
+        plan: "basic",
+        status: "active",
+        priceCents: 100_000,
+      });
 
       return { organization, user };
     });
