@@ -17,45 +17,11 @@ import {
 import NotFound from '@/pages/not-found';
 import { PlatformProvider, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
 import { employees } from '@/data/employees';
+import type { Employee } from '@/types/employee';
 
 const queryClient = new QueryClient();
 
 type Icon = typeof Activity;
-type Employee = {
-  id: string;
-  name: string;
-  role: string;
-  department: string;
-  initials: string;
-  color: string;
-  accent: string;
-  status?: string | "active" | "inactive";
-  active: boolean;
-  metric: string;
-  metricLabel: string;
-  description: string;
-  skills: string[];
-  responsibilities?: string[];
-  permissions: string[];
-  knowledge: string[];
-  knowledgeSource: string;
-  systemPrompt?: string;
-  personality?: string;
-  avatar?: string;
-  reportsTo?: string;
-  tools?: string[];
-  goals?: string[];
-  rules?: string[];
-  team?: string[];
-  model?: string;
-  temperature?: number;
-  memoryEnabled?: boolean;
-  knowledgeEnabled?: boolean;
-  manager: string;
-  performance: number;
-  lastActive: string;
-  tasks: string[];
-};
 
 type EmployeeDraft = {
   name: string;
