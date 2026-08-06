@@ -1,0 +1,224 @@
+FINOS AI Workforce Platform Update
+
+Important Development Rule:
+
+Before making any changes:
+
+Inspect the existing codebase first.
+
+DO NOT create duplicate:
+- Components
+- Types
+- Services
+- Routes
+- Database tables
+- Employee models
+- Logic
+
+Reuse and extend the existing architecture.
+
+Follow:
+
+Inspect → Reuse → Refactor → Verify
+
+
+Current Tasks:
+
+1) Fix Overview Timezone
+
+The Overview page currently needs time synchronization.
+
+Do not hardcode time.
+
+Use the user's browser timezone automatically.
+
+Example:
+
+User in Egypt:
+show Egypt local time
+
+User in USA:
+show USA local time
+
+Use existing utilities if available.
+Do not add unnecessary dependencies.
+
+
+--------------------------------------------------
+
+
+2) Employee Intelligence Preparation
+
+Existing Employee system should remain.
+
+Do not create a second Employee model.
+
+Enhance the existing employee structure to support:
+
+- Prompt
+- Personality
+- Goals
+- Rules
+- Skills
+- Knowledge Base
+- Memory
+- Tools
+- Permissions
+
+
+The employee should become an AI Agent, not only a profile.
+
+
+--------------------------------------------------
+
+
+3) Company Registration System
+
+Add company onboarding only if it does not already exist.
+
+Flow:
+
+Landing Page
+
+↓
+
+Create Company Account
+
+↓
+
+Company Profile
+
+↓
+
+Admin User
+
+↓
+
+Subscription Selection
+
+↓
+
+Dashboard
+
+
+Company data:
+
+- Company Name
+- Email
+- Industry
+- Company Size
+
+
+Keep Multi-Tenant architecture.
+
+Every company must be isolated.
+
+
+--------------------------------------------------
+
+
+4) Subscription System
+
+Create subscription logic without duplicating employees.
+
+Plans:
+
+
+BASIC PLAN
+Price:
+$1000
+
+Available AI Employees:
+
+- CEO AI
+- COO AI
+- Customer Service AI
+- HR AI
+- Accounting AI
+
+
+PREMIUM PLAN
+Price:
+$2000
+
+Unlock:
+
+- All AI Employees
+- All Departments
+- Advanced Workflows
+- Advanced Tools
+- Full Knowledge Features
+
+
+Important:
+
+Do NOT create separate BasicEmployees or PremiumEmployees.
+
+Use access rules / permissions.
+
+Example:
+
+subscription_plan
+
+↓
+
+employee_access_rules
+
+↓
+
+existing employees
+
+
+--------------------------------------------------
+
+
+5) Database Preparation
+
+Before creating tables:
+
+Inspect existing database/types.
+
+Only add missing structures.
+
+Prepare for:
+
+- Organizations
+- Users
+- Departments
+- Employees
+- Knowledge Base
+- Memory
+- Workflows
+- Conversations
+- Subscriptions
+- Permissions
+
+
+Every company-related table must support:
+
+organization_id
+
+
+--------------------------------------------------
+
+
+Replit Free Plan Considerations:
+
+Keep architecture simple.
+
+Avoid:
+
+- Microservices
+- Expensive infrastructure
+- Unnecessary packages
+- Duplicate code
+
+
+Goal:
+
+Build a scalable SaaS architecture while keeping the current project stable.
+
+
+Do not rebuild the project.
+
+Improve the existing architecture only.
