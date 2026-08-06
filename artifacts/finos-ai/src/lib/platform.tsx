@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { tenantCatalog } from '@/data/organization';
+import type { Company } from '@/types/company';
 
 export type PlatformTheme = 'dark' | 'light';
 
@@ -70,12 +72,7 @@ export type WorkspacePreferences = {
   weeklyDigest: boolean;
 };
 
-export type TenantWorkspace = {
-  id: string;
-  name: string;
-  domain: string;
-  initials: string;
-};
+export type TenantWorkspace = Company;
 
 type PlatformContextValue = {
   tenant: TenantWorkspace;
@@ -155,12 +152,6 @@ const initialPreferences: WorkspacePreferences = {
   criticalAlerts: true,
   weeklyDigest: false,
 };
-
-export const tenantCatalog: TenantWorkspace[] = [
-  { id: 'orbit-digital', name: 'Orbit Digital', domain: 'orbit.digital', initials: 'OD' },
-  { id: 'northstar-market', name: 'Northstar Market', domain: 'northstar.co', initials: 'NM' },
-  { id: 'solace-studio', name: 'Solace Studio', domain: 'solacestudio.com', initials: 'SS' },
-];
 
 export function tenantForIdentity(identity: string, demo = false): TenantWorkspace {
   if (demo) return tenantCatalog[0];
