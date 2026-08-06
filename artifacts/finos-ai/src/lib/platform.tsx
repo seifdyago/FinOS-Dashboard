@@ -70,7 +70,17 @@ export type WorkspacePreferences = {
   weeklyDigest: boolean;
 };
 
+export type TenantWorkspace = {
+  id: string;
+  name: string;
+  domain: string;
+  initials: string;
+};
+
 type PlatformContextValue = {
+  tenant: TenantWorkspace;
+  availableTenants: TenantWorkspace[];
+  switchTenant: (tenantId: string) => void;
   theme: PlatformTheme;
   toggleTheme: () => void;
   user: WorkspaceUser;
@@ -146,6 +156,49 @@ const initialPreferences: WorkspacePreferences = {
   weeklyDigest: false,
 };
 
+export const tenantCatalog: TenantWorkspace[] = [
+  { id: 'orbit-digital', name: 'Orbit Digital', domain: 'orbit.digital', initials: 'OD' },
+  { id: 'northstar-market', name: 'Northstar Market', domain: 'northstar.co', initials: 'NM' },
+  { id: 'solace-studio', name: 'Solace Studio', domain: 'solacestudio.com', initials: 'SS' },
+];
+
+export function tenantForIdentity(identity: string, demo = false): TenantWorkspace {
+  if (demo) return tenantCatalog[0];
+  const domain = identity.trim().toLowerCase().split('@')[1] || 'orbit.digital';
+  const known = tenantCatalog.find((tenant) => tenant.domain === domain);
+  if (known) return known;
+  const base = domain.split('.')[0] || 'workspace';
+  const name = base.split(/[-_.]/).filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join(' ') || 'Workspace';
+  return { id: base.replace(/[^a-z0-9]+/g, '-') || 'workspace', name, domain, initials: name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() };
+}
+
+function tenantKey(tenantId: string, key: string) {
+  return `finos:${tenantId}:${key}`;
+}
+
+function readTenantStored<T>(tenantId: string, key: string, fallback: T, migrateLegacy = false): T {
+  const scopedKey = tenantKey(tenantId, key);
+  try {
+    const scopedValue = localStorage.getItem(scopedKey);
+    if (scopedValue !== null) return JSON.parse(scopedValue) as T;
+  } catch {
+    // Fall through to the migration/default path.
+  }
+  if (migrateLegacy) {
+    try {
+      const legacyValue = localStorage.getItem(`finos-${key}`);
+      if (legacyValue !== null) {
+        const legacy = JSON.parse(legacyValue) as T;
+        localStorage.setItem(scopedKey, JSON.stringify(legacy));
+        return legacy;
+      }
+    } catch {
+      // Use the supplied fallback when an older value is malformed.
+    }
+  }
+  return fallback;
+}
+
 function readStored<T>(key: string, fallback: T): T {
   try {
     const value = localStorage.getItem(key);
@@ -166,35 +219,47 @@ function normalizeCustomers(records: CustomerRecord[]): CustomerRecord[] {
 const PlatformContext = createContext<PlatformContextValue | null>(null);
 
 export function PlatformProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<PlatformTheme>(() => readStored('finos-theme', 'dark'));
-  const [user, setUser] = useState<WorkspaceUser>(() => readStored('finos-user', {
-    name: 'Jordan Shaw',
-    email: 'jordan@orbit.digital',
+  const [tenant, setTenant] = useState<TenantWorkspace>(() => readStored('finos-active-tenant', tenantCatalog[0]));
+  const legacyMigration = tenant.id === 'orbit-digital';
+  const [theme, setTheme] = useState<PlatformTheme>(() => readTenantStored(tenant.id, 'theme', 'dark', legacyMigration));
+  const [user, setUser] = useState<WorkspaceUser>(() => readTenantStored(tenant.id, 'user', {
+    name: `${tenant.name} Admin`,
+    email: `admin@${tenant.domain}`,
     role: 'Workspace admin',
-    initials: 'JS',
+    initials: `${tenant.initials}A`,
     title: 'Chief Operating Officer',
     timezone: 'Pacific Time (US & Canada)',
-  }));
-  const [preferences, setPreferences] = useState(() => readStored('finos-preferences', initialPreferences));
-  const [notifications, setNotifications] = useState(() => readStored('finos-notifications', initialNotifications));
-  const [transactions, setTransactions] = useState(() => readStored('finos-transactions', initialTransactions));
-  const [customers, setCustomers] = useState(() => normalizeCustomers(readStored('finos-customers', initialCustomers)));
-  const [merchants, setMerchants] = useState(() => readStored('finos-merchants', initialMerchants));
-  const [reports, setReports] = useState(() => readStored('finos-reports', initialReports));
+  }, legacyMigration));
+  const [preferences, setPreferences] = useState(() => readTenantStored(tenant.id, 'preferences', { ...initialPreferences, workspaceName: tenant.name, operatingContext: `${tenant.name} is a global payments platform serving thoughtful commerce brands.` }, legacyMigration));
+  const [notifications, setNotifications] = useState(() => readTenantStored(tenant.id, 'notifications', initialNotifications, legacyMigration));
+  const [transactions, setTransactions] = useState(() => readTenantStored(tenant.id, 'transactions', tenant.id === 'orbit-digital' ? initialTransactions : [], legacyMigration));
+  const [customers, setCustomers] = useState(() => normalizeCustomers(readTenantStored(tenant.id, 'customers', tenant.id === 'orbit-digital' ? initialCustomers : [], legacyMigration)));
+  const [merchants, setMerchants] = useState(() => readTenantStored(tenant.id, 'merchants', tenant.id === 'orbit-digital' ? initialMerchants : [], legacyMigration));
+  const [reports, setReports] = useState(() => readTenantStored(tenant.id, 'reports', tenant.id === 'orbit-digital' ? initialReports : [], legacyMigration));
 
   useEffect(() => {
-    localStorage.setItem('finos-theme', JSON.stringify(theme));
+    localStorage.setItem(tenantKey(tenant.id, 'theme'), JSON.stringify(theme));
     document.documentElement.classList.toggle('theme-light', theme === 'light');
-  }, [theme]);
-  useEffect(() => localStorage.setItem('finos-user', JSON.stringify(user)), [user]);
-  useEffect(() => localStorage.setItem('finos-preferences', JSON.stringify(preferences)), [preferences]);
-  useEffect(() => localStorage.setItem('finos-notifications', JSON.stringify(notifications)), [notifications]);
-  useEffect(() => localStorage.setItem('finos-transactions', JSON.stringify(transactions)), [transactions]);
-  useEffect(() => localStorage.setItem('finos-customers', JSON.stringify(customers)), [customers]);
-  useEffect(() => localStorage.setItem('finos-merchants', JSON.stringify(merchants)), [merchants]);
-  useEffect(() => localStorage.setItem('finos-reports', JSON.stringify(reports)), [reports]);
+  }, [theme, tenant.id]);
+  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'user'), JSON.stringify(user)), [user, tenant.id]);
+  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'preferences'), JSON.stringify(preferences)), [preferences, tenant.id]);
+  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'notifications'), JSON.stringify(notifications)), [notifications, tenant.id]);
+  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'transactions'), JSON.stringify(transactions)), [transactions, tenant.id]);
+  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'customers'), JSON.stringify(customers)), [customers, tenant.id]);
+  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'merchants'), JSON.stringify(merchants)), [merchants, tenant.id]);
+  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'reports'), JSON.stringify(reports)), [reports, tenant.id]);
+  useEffect(() => localStorage.setItem('finos-active-tenant', JSON.stringify(tenant)), [tenant]);
 
   const value = useMemo<PlatformContextValue>(() => ({
+    tenant,
+    availableTenants: tenantCatalog,
+    switchTenant: (tenantId) => {
+      const next = tenantCatalog.find((candidate) => candidate.id === tenantId);
+      if (next && next.id !== tenant.id) {
+        localStorage.setItem('finos-active-tenant', JSON.stringify(next));
+        window.location.reload();
+      }
+    },
     theme,
     toggleTheme: () => setTheme((current) => current === 'dark' ? 'light' : 'dark'),
     user,
@@ -220,7 +285,7 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     updateMerchantHealth: (id, health) => setMerchants((current) => current.map((merchant) => merchant.id === id ? { ...merchant, health } : merchant)),
     addReport: (record) => setReports((current) => [{ ...record, id: `R-${304 + current.length}`, date: 'Just now', status: 'Ready' }, ...current]),
     deleteReport: (id) => setReports((current) => current.filter((report) => report.id !== id)),
-  }), [theme, user, preferences, notifications, transactions, customers, merchants, reports]);
+  }), [tenant, theme, user, preferences, notifications, transactions, customers, merchants, reports]);
 
   return <PlatformContext.Provider value={value}>{children}</PlatformContext.Provider>;
 }
