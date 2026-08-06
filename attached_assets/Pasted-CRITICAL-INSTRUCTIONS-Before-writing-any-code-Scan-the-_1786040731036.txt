@@ -1,0 +1,124 @@
+CRITICAL INSTRUCTIONS
+
+Before writing any code:
+
+- Scan the entire project first.
+- Detect all existing AI Employees.
+- DO NOT recreate anything that already exists.
+- DO NOT duplicate pages, routes, components or database models.
+- Reuse existing components.
+- Improve existing code only.
+- Keep the current UI exactly as it is.
+- Fix runtime and TypeScript errors before adding features.
+
+Existing AI Employees already in the project:
+
+- Chief Executive Officer
+- Merchant Success
+- Finance Operations
+- Customer Support
+- Fraud Intelligence
+- Compliance & Risk
+
+Do NOT recreate them.
+
+==================================================
+
+TASK 1 - Build the complete HR Department
+
+Create ONLY the missing HR AI employees.
+
+1. HR Manager
+Responsibilities:
+- Employee Management
+- Attendance
+- Leave Requests
+- Payroll Overview
+- Hiring Dashboard
+- Employee Performance
+- Department Management
+- Employee Analytics
+
+2. Recruiter
+Responsibilities:
+- Job Posts
+- Candidate Pipeline
+- Resume Screening
+- Interview Scheduling
+- Candidate Scoring
+- Hiring Recommendations
+
+3. Talent Acquisition Specialist
+Responsibilities:
+- Talent Search
+- Skills Matching
+- Candidate Ranking
+- AI Hiring Suggestions
+- Recruitment Analytics
+
+4. Learning & Development Manager
+Responsibilities:
+- Employee Training
+- Learning Paths
+- Certifications
+- Course Progress
+- Skill Development
+
+5. Performance Manager
+Responsibilities:
+- KPI Tracking
+- Performance Reviews
+- Goals
+- Promotions
+- Employee Reports
+
+6. Payroll Manager
+Responsibilities:
+- Salary Management
+- Bonuses
+- Deductions
+- Payroll Reports
+- Payslips
+- Monthly Payroll Analytics
+
+==================================================
+
+Each HR AI Employee must include:
+
+- Dashboard
+- Statistics Cards
+- AI Chat
+- Assigned Tasks
+- Calendar
+- Notifications
+- Analytics
+- Activity Timeline
+- Reports
+- Settings
+- Permissions
+- Mock Data
+- Working UI
+
+==================================================
+
+Improve the existing Add AI Employee page.
+
+Do NOT replace it.
+
+Extend it to support:
+
+- Name
+- Role
+- Department
+- Description
+- Skills
+- Responsibilities
+- Permissions
+- Knowledge Base
+- System Prompt
+- AI Personality
+- Avatar
+- Color
+- Status
+
+Finish by checking the entire project for duplicate code and runtime errors.
