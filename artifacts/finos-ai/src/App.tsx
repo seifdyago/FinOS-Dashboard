@@ -18,6 +18,7 @@ import NotFound from '@/pages/not-found';
 import { PlatformProvider, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
 import { employees } from '@/data/employees';
 import type { Employee } from '@/types/employee';
+import { createCompanyOnboarding } from '@workspace/api-client-react';
 
 const queryClient = new QueryClient();
 
@@ -793,10 +794,152 @@ function AssistantPage() {
   return <div className="mx-auto max-w-[1000px]"><SectionHeader eyebrow="Command center / AI" title="Ask FinOS anything." description="A workspace-aware assistant for fast operational answers, grounded in the mock financial data already in your workspace."/><div className="panel overflow-hidden"><div className="flex min-h-[420px] flex-col space-y-4 p-5 md:p-7">{messages.map((item, index) => <div key={index} className={`max-w-[80%] rounded-xl p-4 text-[13px] leading-6 ${item.role === 'user' ? 'ml-auto bg-[#183947] text-[#c8e1e6]' : 'bg-[#10283a] text-[#a9c0cb]'}`}><div className="kicker mb-1">{item.role === 'user' ? 'You' : 'FinOS AI'}</div>{item.text}</div>)}<div className="mt-auto flex flex-wrap gap-2 pt-4">{['What needs review?', 'How are customers doing?', 'Show merchant growth'].map((prompt) => <button key={prompt} onClick={() => { setMessage(prompt); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid={`button-prompt-${prompt.toLowerCase().replaceAll(' ', '-')}`}>{prompt}</button>)}</div></div><div className="flex gap-2 border-t border-[#1b3448] p-4"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-sm" placeholder="Ask about your operation..." data-testid="input-assistant-message"/><button onClick={send} className="btn-primary grid h-10 w-10 place-items-center rounded-lg" data-testid="button-send-assistant"><Send size={15}/></button></div></div></div>;
 }
 
-function Login({onLogin}:{onLogin:()=>void}) {
-  const [email,setEmail]=useState(''); const [loading,setLoading]=useState(false);
-  const enter=(demo = false)=>{if (!demo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast.error('Enter a valid work email'); return; } const tenant = tenantForIdentity(email, demo); localStorage.setItem('finos-active-tenant', JSON.stringify(tenant)); setLoading(true);setTimeout(()=>{localStorage.setItem('finos-auth','1');localStorage.setItem('finos-auth-at',String(Date.now()));onLogin();toast.success(`Welcome to ${tenant.name}`);setLoading(false)},500)};
-  return <div className="noise flex min-h-[100dvh] bg-[#07111f]"><div className="relative hidden w-[48%] overflow-hidden border-r border-[#193149] lg:block"><div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(56,168,187,.23),transparent_30%),radial-gradient(circle_at_80%_80%,rgba(103,71,160,.19),transparent_35%)]"/><div className="relative flex h-full flex-col justify-between p-12"><Logo/><div className="max-w-[420px]"><div className="mb-7 flex items-center gap-2 text-[11px] uppercase tracking-[.16em] text-[#58d5e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#58d5e6]"/> Payment operations, with perspective</div><h1 className="display-font text-[54px] font-semibold leading-[1.03] tracking-[-.06em] text-[#edf7fa]">The calm<br/><span className="text-[#58d5e6]">behind</span> every<br/>transaction.</h1><p className="mt-7 max-w-[360px] text-[14px] leading-6 text-[#8299ad]">FinOS gives your finance, risk, and merchant teams a shared view of money in motion — with an AI team that knows what to do next.</p></div><div className="flex items-center gap-6 text-[11px] text-[#637d92]"><span className="flex items-center gap-2"><ShieldCheck size={14} className="text-[#52d4b0]"/>SOC 2 Type II</span><span className="flex items-center gap-2"><Globe2 size={14} className="text-[#58d5e6]"/>Built for global commerce</span></div></div></div><div className="flex flex-1 items-center justify-center px-6 py-10"><div className="w-full max-w-[390px]"><div className="mb-10 lg:hidden"><Logo/></div><div className="kicker mb-3">Welcome back</div><h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">Sign in to your workspace.</h2><p className="mt-2 text-[13px] text-[#8299ad]">Your operating picture is waiting.</p><div className="mt-8 space-y-4"><label className="block"><span className="kicker mb-2 block">Work email</span><input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="you@company.com" className="input-dark h-11 w-full rounded-lg px-3 text-sm" data-testid="input-login-email"/></label><button onClick={() => enter()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-login">{loading?<RefreshCw size={15} className="animate-spin"/>:<ArrowUpRight size={15}/>} {loading?'Signing in...':'Continue with email'}</button><div className="flex items-center gap-3 py-1"><div className="h-px flex-1 bg-[#1b3549]"/><span className="text-[10px] uppercase tracking-widest text-[#5f788e]">or</span><div className="h-px flex-1 bg-[#1b3549]"/><button onClick={() => enter(true)} className="btn-quiet flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-demo-access"><Sparkles size={15} className="text-[#58d5e6]"/> Enter demo workspace</button></div><p className="mt-8 text-center text-[11px] leading-5 text-[#637e93]">By continuing, you agree to the FinOS terms and privacy policy.<br/>No production data is used in this demo.</p><div className="mt-16 flex items-center justify-center gap-2 text-[10px] text-[#516c82]"><span className="h-1.5 w-1.5 rounded-full bg-[#52d4b0]"/>Systems operational <span className="mx-1 text-[#2d4a5f]">•</span> v2.4.1</div></div></div></div></div>;
+function Login({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [onboarding, setOnboarding] = useState(false);
+  const [step, setStep] = useState(1);
+  const [companyName, setCompanyName] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [companySize, setCompanySize] = useState('');
+  const [error, setError] = useState('');
+
+  const finishLogin = (tenant: ReturnType<typeof tenantForIdentity>, admin?: { name: string; email: string; role: string }) => {
+    localStorage.setItem('finos-active-tenant', JSON.stringify(tenant));
+    if (admin) {
+      const initials = admin.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+      localStorage.setItem(`finos:${tenant.id}:user`, JSON.stringify({
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+        initials,
+        title: 'Company administrator',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }));
+    }
+    localStorage.setItem('finos-auth', '1');
+    localStorage.setItem('finos-auth-at', String(Date.now()));
+    onLogin();
+  };
+
+  const enter = (demo = false) => {
+    if (!demo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Enter a valid work email');
+      return;
+    }
+    const tenant = tenantForIdentity(email, demo);
+    setLoading(true);
+    setTimeout(() => {
+      finishLogin(tenant);
+      toast.success(`Welcome to ${tenant.name}`);
+      setLoading(false);
+    }, 500);
+  };
+
+  const beginOnboarding = () => {
+    setError('');
+    setOnboarding(true);
+    setStep(1);
+  };
+
+  const nextOnboardingStep = () => {
+    setError('');
+    if (step === 1 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Enter a valid work email for the company administrator.');
+      return;
+    }
+    if (step === 2 && (!companyName.trim() || !industry || !companySize)) {
+      setError('Complete the company profile before continuing.');
+      return;
+    }
+    setStep((current) => current + 1);
+  };
+
+  const createWorkspace = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const result = await createCompanyOnboarding({
+        name: companyName.trim(),
+        email: email.trim().toLowerCase(),
+        industry,
+        company_size: companySize,
+      });
+      const tenant = {
+        id: result.organization.id,
+        name: result.organization.name,
+        domain: result.organization.domain,
+        initials: result.organization.initials,
+      };
+      finishLogin(tenant, {
+        name: result.user.name,
+        email: result.user.email,
+        role: result.user.role,
+      });
+      toast.success(`Workspace created for ${tenant.name}`);
+    } catch (requestError) {
+      const responseError = requestError as { data?: { error?: string }; message?: string };
+      setError(responseError.data?.error || responseError.message || 'Unable to create the company workspace.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fieldClass = 'input-dark h-11 w-full rounded-lg px-3 text-sm';
+  const onboardingPanel = (
+    <>
+      <div className="mb-7 flex items-center justify-between">
+        <div>
+          <div className="kicker mb-2">Company onboarding</div>
+          <h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">
+            {step === 1 ? 'Create your company account.' : step === 2 ? 'Tell us about your company.' : 'Confirm your admin workspace.'}
+          </h2>
+        </div>
+        <button onClick={() => { setOnboarding(false); setStep(1); setError(''); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid="button-back-to-login">Back</button>
+      </div>
+      <div className="mb-7 grid grid-cols-3 gap-2">
+        {['Company account', 'Company profile', 'Admin user'].map((label, index) => (
+          <div key={label} className={`border-t-2 pt-2 text-[10px] ${step >= index + 1 ? 'border-[#58d5e6] text-[#c8e4e9]' : 'border-[#214057] text-[#607b90]'}`}>
+            {index + 1}. {label}
+          </div>
+        ))}
+      </div>
+      {step === 1 && (
+        <label className="block">
+          <span className="kicker mb-2 block">Admin work email</span>
+          <input autoFocus value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="you@company.com" className={fieldClass} data-testid="input-onboarding-email"/>
+          <span className="mt-2 block text-[11px] leading-5 text-[#71899d]">We’ll use your company domain to establish the initial workspace identity.</span>
+        </label>
+      )}
+      {step === 2 && (
+        <div className="space-y-4">
+          <label className="block"><span className="kicker mb-2 block">Company name</span><input autoFocus value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Orbit Digital" className={fieldClass} data-testid="input-onboarding-company-name"/></label>
+          <label className="block"><span className="kicker mb-2 block">Industry</span><select value={industry} onChange={(event) => setIndustry(event.target.value)} className={fieldClass} data-testid="select-onboarding-industry"><option value="">Select an industry</option><option>Financial services</option><option>Payments</option><option>Commerce</option><option>Technology</option><option>Professional services</option><option>Other</option></select></label>
+          <label className="block"><span className="kicker mb-2 block">Company size</span><select value={companySize} onChange={(event) => setCompanySize(event.target.value)} className={fieldClass} data-testid="select-onboarding-company-size"><option value="">Select company size</option><option>1–10</option><option>11–50</option><option>51–200</option><option>201–500</option><option>501–1,000</option><option>1,000+</option></select></label>
+        </div>
+      )}
+      {step === 3 && (
+        <div className="rounded-xl border border-[#25465d] bg-[#0c2130] p-4">
+          <div className="kicker mb-3">Initial admin user</div>
+          <div className="space-y-3 text-[12px]">
+            <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#dcebf0]">{email}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#dcebf0]">{companyName}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Industry</span><span className="text-right text-[#dcebf0]">{industry}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company size</span><span className="text-right text-[#dcebf0]">{companySize}</span></div>
+            <div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">This account will be created as the organization’s Workspace admin and will be isolated under its new organization ID.</div>
+          </div>
+        </div>
+      )}
+      {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
+      <button onClick={step === 3 ? createWorkspace : nextOnboardingStep} disabled={loading} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid={step === 3 ? 'button-create-workspace' : 'button-onboarding-next'}>
+        {loading ? <RefreshCw size={15} className="animate-spin"/> : step === 3 ? <Building2 size={15}/> : <ArrowUpRight size={15}/>}
+        {loading ? 'Creating workspace...' : step === 3 ? 'Create organization' : 'Continue'}
+      </button>
+      {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]" data-testid="button-onboarding-previous">Previous step</button>}
+    </>
+  );
+
+  return <div className="noise flex min-h-[100dvh] bg-[#07111f]"><div className="relative hidden w-[48%] overflow-hidden border-r border-[#193149] lg:block"><div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(56,168,187,.23),transparent_30%),radial-gradient(circle_at_80%_80%,rgba(103,71,160,.19),transparent_35%)]"/><div className="relative flex h-full flex-col justify-between p-12"><Logo/><div className="max-w-[420px]"><div className="mb-7 flex items-center gap-2 text-[11px] uppercase tracking-[.16em] text-[#58d5e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#58d5e6]"/> Payment operations, with perspective</div><h1 className="display-font text-[54px] font-semibold leading-[1.03] tracking-[-.06em] text-[#edf7fa]">The calm<br/><span className="text-[#58d5e6]">behind</span> every<br/>transaction.</h1><p className="mt-7 max-w-[360px] text-[14px] leading-6 text-[#8299ad]">FinOS gives your finance, risk, and merchant teams a shared view of money in motion — with an AI team that knows what to do next.</p></div><div className="flex items-center gap-6 text-[11px] text-[#637d92]"><span className="flex items-center gap-2"><ShieldCheck size={14} className="text-[#52d4b0]"/>SOC 2 Type II</span><span className="flex items-center gap-2"><Globe2 size={14} className="text-[#58d5e6]"/>Built for global commerce</span></div></div></div><div className="flex flex-1 items-center justify-center px-6 py-10"><div className="w-full max-w-[390px]"><div className="mb-10 lg:hidden"><Logo/></div>{onboarding ? onboardingPanel : <><div className="kicker mb-3">Welcome back</div><h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">Sign in to your workspace.</h2><p className="mt-2 text-[13px] text-[#8299ad]">Your operating picture is waiting.</p><div className="mt-8 space-y-4"><label className="block"><span className="kicker mb-2 block">Work email</span><input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@company.com" className={fieldClass} data-testid="input-login-email"/></label><button onClick={() => enter()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-login">{loading?<RefreshCw size={15} className="animate-spin"/>:<ArrowUpRight size={15}/>} {loading?'Signing in...':'Continue with email'}</button><div className="flex items-center gap-3 py-1"><div className="h-px flex-1 bg-[#1b3549]"/><span className="text-[10px] uppercase tracking-widest text-[#5f788e]">or</span><div className="h-px flex-1 bg-[#1b3549]"/><button onClick={() => enter(true)} disabled={loading} className="btn-quiet flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-demo-access"><Sparkles size={15} className="text-[#58d5e6]"/> Enter demo workspace</button></div><button onClick={beginOnboarding} className="mt-4 w-full text-[11px] text-[#58d5e6] hover:text-[#9debf0]" data-testid="button-create-company">Create a company account <ArrowUpRight size={12} className="ml-1 inline"/></button><p className="mt-8 text-center text-[11px] leading-5 text-[#637e93]">By continuing, you agree to the FinOS terms and privacy policy.<br/>No production data is used in this demo.</p><div className="mt-16 flex items-center justify-center gap-2 text-[10px] text-[#516c82]"><span className="h-1.5 w-1.5 rounded-full bg-[#52d4b0]"/>Systems operational <span className="mx-1 text-[#2d4a5f]">•</span> v2.4.1</div></div></>}</div></div></div>;
 }
 
 function EmptyState({title,description,compact=false}:{title:string;description:string;compact?:boolean}) { return <div className={`flex flex-col items-center justify-center text-center ${compact?'py-10':'py-20'}`}><div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-[#163347] text-[#58d5e6]"><Search size={18}/></div><div className="text-sm font-semibold text-[#cfe0e7]">{title}</div><div className="mt-1 text-[11px] text-[#71899d]">{description}</div></div>; }

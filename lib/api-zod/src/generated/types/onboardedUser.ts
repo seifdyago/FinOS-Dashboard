@@ -6,6 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
+export interface OnboardedUser {
+  id: string;
+  organization_id: string;
+  email: string;
+  name: string;
+  role: string;
   status: string;
 }

@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: onboarding
+    description: Company onboarding operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /onboarding/companies:
+    post:
+      operationId: createCompanyOnboarding
+      tags: [onboarding]
+      summary: Create a company workspace
+      description: Creates an organization and its initial admin user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCompanyOnboardingRequest"
+      responses:
+        "201":
+          description: Company workspace created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyOnboardingResponse"
+        "409":
+          description: Company domain already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Invalid onboarding request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +66,88 @@ components:
           type: string
       required:
         - status
+    CreateCompanyOnboardingRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          description: Work email address
+        industry:
+          type: string
+          minLength: 1
+        company_size:
+          type: string
+          minLength: 1
+      required:
+        - name
+        - email
+        - industry
+        - company_size
+    CompanyOnboardingResponse:
+      type: object
+      properties:
+        organization:
+          $ref: "#/components/schemas/OnboardedOrganization"
+        user:
+          $ref: "#/components/schemas/OnboardedUser"
+      required:
+        - organization
+        - user
+    OnboardedOrganization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        domain:
+          type: string
+        initials:
+          type: string
+        industry:
+          type: string
+        company_size:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - name
+        - domain
+        - initials
+        - industry
+        - company_size
+        - status
+    OnboardedUser:
+      type: object
+      properties:
+        id:
+          type: string
+        organization_id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - organization_id
+        - email
+        - name
+        - role
+        - status
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
 

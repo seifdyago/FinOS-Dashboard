@@ -14,3 +14,9 @@ The database foundation uses UUID primary keys for persisted users and employees
 **Why:** The frontend roster IDs are tenant-local stable identifiers, so making them globally unique database primary keys would prevent the same AI workforce template from being reused across organizations.
 
 **How to apply:** Database adapters should map `employee_key` back to frontend `Employee.id`, and organization-scoped repositories must always filter by `organization_id` before resolving employee or department records.
+
+Company onboarding should create one organization and its initial admin user transactionally, then expose the organization through the existing `Company`/tenant shape and localStorage-backed session until real authentication is introduced.
+
+**Why:** The current dashboard and PlatformProvider already depend on a persisted active tenant and tenant-scoped workspace state; onboarding must establish that same boundary without introducing a parallel company or session system.
+
+**How to apply:** Derive the company domain from the admin email, enforce organization uniqueness at the database boundary, and persist only the returned Company-compatible tenant plus admin profile into the existing keys before entering the current dashboard.
