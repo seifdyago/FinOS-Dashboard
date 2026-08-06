@@ -29,7 +29,7 @@ type Employee = {
   initials: string;
   color: string;
   accent: string;
-  status: string;
+  status?: string | "active" | "inactive";
   active: boolean;
   metric: string;
   metricLabel: string;
@@ -42,6 +42,15 @@ type Employee = {
   systemPrompt?: string;
   personality?: string;
   avatar?: string;
+  reportsTo?: string;
+  tools?: string[];
+  goals?: string[];
+  rules?: string[];
+  team?: string[];
+  model?: string;
+  temperature?: number;
+  memoryEnabled?: boolean;
+  knowledgeEnabled?: boolean;
   manager: string;
   performance: number;
   lastActive: string;
