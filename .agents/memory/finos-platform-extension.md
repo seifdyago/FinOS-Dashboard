@@ -26,3 +26,9 @@ Subscription access is organization-scoped through one subscription record and s
 **Why:** Basic and Premium are access entitlements over the same AI workforce, so duplicating employees would split identity, permissions, and future roster updates.
 
 **How to apply:** Resolve access from subscription status and plan, match Basic by stable employee key or role label, let Premium unlock the shared roster/departments/advanced access, and deny inactive or unknown plans.
+
+Knowledge documents are organization-owned records with an optional foreign key to the existing persisted employee UUID; employee-key lookup must resolve within the same organization before association.
+
+**Why:** The database employee UUID is the canonical persisted identity, while `employee_key` is tenant-local frontend compatibility data; using both correctly prevents duplicate employee models and cross-tenant document links.
+
+**How to apply:** Filter every document read by `organization_id`, allow unassigned documents for the organization, allow assigned documents only to the matching employee scope, and reuse subscription `manage:knowledge` access for management checks.

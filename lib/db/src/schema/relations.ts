@@ -4,11 +4,13 @@ import { users } from "./users";
 import { departments } from "./departments";
 import { employees } from "./employees";
 import { subscriptions } from "./subscriptions";
+import { knowledgeDocuments } from "./knowledge-documents";
 
 export const organizationsRelations = relations(organizations, ({ many, one }) => ({
   users: many(users),
   departments: many(departments),
   employees: many(employees),
+  knowledgeDocuments: many(knowledgeDocuments),
   subscription: one(subscriptions),
 }));
 
@@ -42,6 +44,18 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
     relationName: "employee_manager",
   }),
   reports: many(employees, { relationName: "employee_manager" }),
+  knowledgeDocuments: many(knowledgeDocuments),
+}));
+
+export const knowledgeDocumentsRelations = relations(knowledgeDocuments, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [knowledgeDocuments.organizationId],
+    references: [organizations.id],
+  }),
+  employee: one(employees, {
+    fields: [knowledgeDocuments.employeeId],
+    references: [employees.id],
+  }),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({

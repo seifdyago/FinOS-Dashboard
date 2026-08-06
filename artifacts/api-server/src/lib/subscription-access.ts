@@ -70,6 +70,14 @@ export function canAccessEmployee(
   return createSubscriptionAccess(subscription).canAccessEmployee(employee);
 }
 
+export function canAccessEmployeePermission(
+  subscription: SubscriptionLike | null | undefined,
+  employee: EmployeeAccessSubject,
+  permission: string,
+): boolean {
+  return createSubscriptionAccess(subscription).canAccessEmployeePermission(employee, permission);
+}
+
 export function canAccessDepartment(
   subscription: SubscriptionLike | null | undefined,
   department: string,
