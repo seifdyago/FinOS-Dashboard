@@ -1,0 +1,108 @@
+Proceed with the FIRST AI Employee milestone now.
+
+Do NOT do another inspection.
+Do NOT work on Neon, Vercel, S3, Blob, database migration, or company-account integration.
+Do NOT modify the existing database schema.
+Do NOT modify or delete existing employee data.
+Do NOT redesign the employee UI.
+Do NOT redo Step 1 or Step 2.
+
+GOAL:
+
+Make the existing AI Employee chat actually work.
+
+The required flow is:
+
+Open existing employee
+→ open employee workspace/chat
+→ type a message
+→ send it to the backend
+→ backend resolves the selected employee and current organization
+→ backend builds the employee-specific system instructions
+→ backend calls the Replit-managed OpenAI integration
+→ stream the real AI response
+→ display the response inside the existing employee chat UI.
+
+IMPLEMENT NOW:
+
+1. Set up the Replit-managed OpenAI integration for this project if it is available.
+2. Use the managed integration environment variables:
+   AI_INTEGRATIONS_OPENAI_BASE_URL
+   AI_INTEGRATIONS_OPENAI_API_KEY
+
+3. Keep both values server-side only.
+   Never expose them to the frontend.
+
+4. Create the minimum backend AI chat service/route needed.
+
+5. The backend must resolve the employee using the current organization/tenant context.
+   Never trust arbitrary employee instructions sent from the browser.
+
+6. Build the employee system prompt from the EXISTING employee configuration:
+   - name
+   - role
+   - department
+   - description
+   - skills
+   - responsibilities
+   - permissions
+   - knowledge
+   - knowledgeSource
+   - personality
+   - rules
+   - systemPrompt
+
+7. The employee must behave according to its own role.
+
+Examples:
+- Finance employee → finance reasoning
+- HR employee → HR reasoning
+- Sales employee → sales reasoning
+- Security employee → security reasoning
+- CEO employee → executive/business reasoning
+
+Do NOT create one generic FinOS chatbot.
+
+8. Preserve the existing employee routes and UI.
+
+9. Replace only the current local-only employee chat send behavior with the real backend request.
+
+10. Use the existing OpenAPI/codegen architecture where practical.
+    Do not create a completely separate API architecture.
+
+11. Stream the response if the current stack supports it cleanly.
+    If streaming would require unnecessary complexity, implement a normal response first.
+    The priority is a reliable working AI response.
+
+12. For this milestone, DO NOT implement persistent memory or database conversation storage yet.
+    We will build that as the next milestone after the basic AI chat is proven.
+
+13. Do not send the entire company database or all knowledge documents to the model.
+    Only send the employee instructions/context needed for this first milestone.
+
+14. Add basic error handling for:
+    - missing AI integration
+    - failed model request
+    - invalid employee
+    - unauthorized organization/tenant access
+
+15. Test the complete flow with an existing seeded employee.
+
+IMPORTANT:
+Do not stop after creating the route.
+Actually connect the existing employee chat UI to it and verify that a real model response is returned.
+
+When finished, report only:
+
+1. Files changed.
+2. AI model/provider used.
+3. Whether the Replit AI integration is active.
+4. Whether the employee chat now produces a real AI response.
+5. Any environment variable that is still missing.
+6. Any blocker that prevents me from testing the chat now.
+
+Do not implement memory yet.
+Do not implement company integrations yet.
+Do not implement knowledge retrieval yet.
+Do not migrate the database.
+Do not deploy.
