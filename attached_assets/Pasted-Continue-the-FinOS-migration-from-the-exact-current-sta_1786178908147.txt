@@ -1,0 +1,93 @@
+Continue the FinOS migration from the exact current state.
+
+IMPORTANT — DO NOT REPEAT COMPLETED WORK:
+- Step 1 is already completed.
+- Step 2 is already completed.
+- The changes were pushed to GitHub.
+- Do NOT redo, rewrite, or revert those changes.
+- Do NOT touch the existing Replit database or object storage.
+- Do NOT migrate, delete, modify, or overwrite any existing production data.
+- Do NOT deploy anything yet.
+- Do NOT create storage buckets or move files yet.
+- Do NOT add AI features yet.
+- Do NOT change the frontend employee system yet.
+
+CURRENT STATE:
+- I am temporarily working on Replit using a new Replit account.
+- The project was imported into this Replit workspace.
+- The goal remains to eventually run FinOS independently of Replit.
+- Target architecture:
+  Frontend/API -> Vercel
+  PostgreSQL -> Neon
+  Object storage -> decide later
+- Existing application behavior and database schema must be preserved.
+
+COMPLETED:
+STEP 1:
+- Deploy blockers in vite.config.ts were addressed.
+- Replit-specific Vite assumptions were addressed as part of the deployment preparation.
+- CORS was addressed as planned.
+
+STEP 2:
+- Express API was prepared for Vercel/serverless deployment.
+- Monorepo/build configuration was prepared.
+- These changes are already in GitHub.
+Do not repeat either step.
+
+NEXT: STEP 3 — NEON CONNECTION
+
+Before changing anything, inspect the current repository and report:
+
+1. Where DATABASE_URL is currently read.
+2. Which database driver Drizzle is using.
+3. Which package/workspace owns the database connection.
+4. Whether the current code already supports a normal PostgreSQL connection string.
+5. Whether any Replit-specific database dependency remains.
+6. Whether the current code requires DATABASE_URL only, or any other database environment variables.
+
+Then STOP and give me the findings.
+
+Do NOT:
+- run migrations
+- run drizzle-kit push
+- change schema files
+- alter database data
+- change repositories/services
+- create a Neon project
+- modify environment variables
+- install unnecessary packages
+
+We are only verifying the exact database connection seam first.
+
+After the inspection, tell me exactly what needs to be done for STEP 3 and wait for my explicit approval before making changes.
+
+NON-NEGOTIABLE PROJECT RULES:
+- No unnecessary vendors or services.
+- No unnecessary code changes.
+- Preserve the existing OpenAPI contract.
+- Preserve the existing generated API libraries.
+- Preserve all 10 database schema files unless a later verified migration requires otherwise.
+- Preserve existing repository/service behavior.
+- Preserve organization/tenant isolation.
+- Preserve subscriptions and platform-admin analytics.
+- Preserve existing employee data/UI.
+- Never assume data can be discarded.
+- Never migrate or delete anything without explicit approval.
+
+LATER PHASES — DO NOT IMPLEMENT NOW:
+1. Neon database migration.
+2. Knowledge-file storage replacement.
+3. Existing Replit database/object migration, only if approved.
+4. Final Vercel deployment.
+5. AI employees:
+   - each employee gets a defined role/instructions
+   - each employee can use relevant company knowledge/data
+   - each employee has persistent memory
+   - user can open an employee and chat with it
+   - AI should respond according to that employee's role
+6. Company account integration:
+   - companies can connect/link their company account to FinOS
+   - their employees/users can be associated with that company
+   - company-specific data and AI employee context must remain tenant-isolated
+
+For now, ONLY perform the read-only inspection for STEP 3.
