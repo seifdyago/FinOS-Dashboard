@@ -1,0 +1,84 @@
+NEXT PRIORITY — AI EMPLOYEES / REAL AI CHAT
+
+Do NOT continue the Neon migration in this task.
+Do NOT touch the database connection, schema, Replit database, object storage, Vercel deployment, or existing migration work.
+
+The immediate priority is to make the FinOS AI actually work.
+
+I want the existing AI Employees system to become a REAL conversational AI system.
+
+Before changing anything, inspect the existing AI Employees UI, employee data/model, builder, employee details page, Assistant page, and all existing frontend/backend architecture related to employees.
+
+IMPORTANT:
+- Do not redesign the existing UI unnecessarily.
+- Do not remove existing employee data.
+- Do not replace the employee system with a generic chatbot.
+- Preserve the existing employee roles, names, descriptions, capabilities, and UI.
+- Do not add fake/mock AI responses.
+- The chat must use a real LLM.
+- Do not add unnecessary vendors or services.
+- Use the simplest reliable AI integration that fits the existing project.
+- Do not implement company-account integration yet.
+- Do not implement the final persistent memory/database architecture yet unless the existing architecture already supports it.
+- Do not modify the 10 existing database schema files during this inspection.
+- Do not migrate any existing data.
+
+PHASE A — READ-ONLY INSPECTION FIRST
+
+Find:
+
+1. Where AI Employees are currently defined.
+2. What data exists for each employee:
+   - name
+   - role
+   - description
+   - instructions
+   - capabilities
+   - department
+   - any existing knowledge/context fields
+3. How the Employee Builder currently saves employee configuration.
+4. How the Employee Details page currently works.
+5. Whether there is already a chat UI connected to an API.
+6. Whether there is already any AI SDK, Vercel AI SDK, OpenAI integration, or other LLM integration anywhere in the repository.
+7. Whether the current Replit environment already has any AI-related secret/environment variable.
+8. Whether the current employee data is stored in:
+   - database
+   - localStorage
+   - static files
+   - or a combination.
+9. What is the smallest clean architecture that will allow:
+   User → select AI Employee → send message → real LLM → response using that employee's role/instructions/context.
+
+The AI must NOT behave like a generic ChatGPT.
+
+For example:
+
+If the employee is a Finance Manager, its system instructions should make it behave like a Finance Manager.
+
+If the employee is an HR Manager, it should behave like HR.
+
+If the employee is a Sales employee, it should respond according to Sales responsibilities.
+
+Each employee must have its own system prompt/instructions generated from its stored configuration.
+
+The future architecture must also support persistent memory per employee and per company, but DO NOT implement the full memory migration yet unless it can be done without changing the existing database architecture.
+
+Most importantly:
+The AI must understand the selected employee's identity and instructions on every conversation.
+
+Do NOT make changes yet.
+
+After the inspection, STOP and report:
+
+A. What AI infrastructure already exists.
+B. What is missing to make real AI chat work.
+C. Which AI provider/integration is already available, if any.
+D. The minimum number of files that need to change.
+E. Exactly which environment variable/API key is required.
+F. How the selected employee's instructions will be passed to the model.
+G. How we can add persistent memory later without rebuilding the whole system.
+H. Any cost/free-tier issue that I need to know before enabling it.
+
+Then WAIT for my explicit approval.
+
+No code changes in this phase.
