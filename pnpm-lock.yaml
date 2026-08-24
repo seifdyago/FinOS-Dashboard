@@ -160,6 +160,9 @@ importers:
       '@replit/connectors-sdk':
         specifier: ^0.4.1
         version: 0.4.1
+      '@workspace/api-server':
+        specifier: workspace:*
+        version: link:artifacts/api-server
     devDependencies:
       prettier:
         specifier: ^3.9.6
