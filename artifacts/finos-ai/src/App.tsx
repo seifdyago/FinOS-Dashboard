@@ -30,6 +30,88 @@ import {
 
 const queryClient = new QueryClient();
 
+const PLATFORM_OWNER_EMAIL = 'seifdyago@gmail.com';
+const PLATFORM_OWNER_PASSWORD_HASH = 'f5c300c99642e85eb995fda3f0bf88cf9002b16656344619ae4dba167750cc7e';
+const AUTH_ACCOUNTS_KEY = 'finos-auth-accounts-v2';
+const ACTIVE_ACCOUNT_KEY = 'finos-active-account-v2';
+
+type StoredAuthAccount = {
+  email: string;
+  passwordHash: string;
+  name: string;
+  role: string;
+  accountType: 'platform_admin' | 'company' | 'individual';
+  subscription: 'basic' | 'premium' | 'free';
+  tenantId: string;
+  tenantName: string;
+  idDocument?: { name: string; type: string; size: number };
+  createdAt: string;
+};
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+async function hashPassword(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function getStoredAccounts(): StoredAuthAccount[] {
+  try {
+    const raw = localStorage.getItem(AUTH_ACCOUNTS_KEY);
+    const parsed = raw ? JSON.parse(raw) as StoredAuthAccount[] : [];
+    const accounts = Array.isArray(parsed) ? parsed : [];
+    if (!accounts.some((account) => normalizeEmail(account.email) === PLATFORM_OWNER_EMAIL)) {
+      accounts.unshift({
+        email: PLATFORM_OWNER_EMAIL,
+        passwordHash: PLATFORM_OWNER_PASSWORD_HASH,
+        name: 'Seifdyago',
+        role: 'Platform owner',
+        accountType: 'platform_admin',
+        subscription: 'premium',
+        tenantId: 'orbit-digital',
+        tenantName: 'FinOS Platform',
+        createdAt: new Date().toISOString(),
+      });
+      localStorage.setItem(AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
+    }
+    return accounts;
+  } catch {
+    return [{
+      email: PLATFORM_OWNER_EMAIL,
+      passwordHash: PLATFORM_OWNER_PASSWORD_HASH,
+      name: 'Seifdyago',
+      role: 'Platform owner',
+      accountType: 'platform_admin',
+      subscription: 'premium',
+      tenantId: 'orbit-digital',
+      tenantName: 'FinOS Platform',
+      createdAt: new Date().toISOString(),
+    }];
+  }
+}
+
+function saveStoredAccounts(accounts: StoredAuthAccount[]): void {
+  localStorage.setItem(AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+function accountTenant(account: StoredAuthAccount): { id: string; name: string; domain: string; initials: string } {
+  const initials = account.tenantName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+  return {
+    id: account.tenantId,
+    name: account.tenantName,
+    domain: account.email.split('@')[1] || 'local',
+    initials: initials || 'FN',
+  };
+}
+
+function isPlatformOwner(email: string): boolean {
+  return normalizeEmail(email) === PLATFORM_OWNER_EMAIL;
+}
+
+
 type Icon = typeof Activity;
 
 function reportWorkspaceActivity(
@@ -122,7 +204,7 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
       accent: draft.color || accent,
       status: draft.status || 'Ready',
       active: true,
-      metric: '鈥�',
+      metric: '閳ワ拷',
       metricLabel: 'no activity yet',
       permissions: draft.permissions,
       knowledge: draft.knowledge,
@@ -167,22 +249,24 @@ const builderPermissions = [
 
 const builderKnowledgeSources = ['Workspace context', 'Transaction history', 'Merchant catalog', 'Policy library', 'Uploaded playbook', 'HR policy library', 'Recruiting playbook', 'Talent knowledge base', 'Learning library', 'Performance handbook', 'Payroll policy library'];
 
-const navGroups = [
-  { label:'Command center', items:[['/', 'Overview', LayoutDashboard], ['/ai-employees', 'AI employees', Bot], ['/assistant', 'AI assistant', MessageCircle]] },
-  { label:'Money movement', items:[['/transactions', 'Transactions', ArrowUpRight], ['/customers', 'Customers', Users], ['/merchants', 'Merchants', Building2]] },
-  { label:'Intelligence', items:[['/reports', 'Reports', FileBarChart2], ['/analytics', 'Analytics', BarChart3], ['/knowledge', 'Company knowledge', FileText]] },
-  { label:'Platform', items:[['/platform-admin', 'Platform admin', ShieldCheck]] },
-];
+function getNavGroups(showMerchant: boolean) {
+  return [
+    { label:'Command center', items:[['/', 'Overview', LayoutDashboard], ['/ai-employees', 'AI employees', Bot], ['/assistant', 'AI assistant', MessageCircle]] },
+    { label:'Money movement', items:[['/transactions', 'Transactions', ArrowUpRight], ['/customers', 'Customers', Users], ...(showMerchant ? [['/merchants', 'Merchants', Building2]] : [])] },
+    { label:'Intelligence', items:[['/reports', 'Reports', FileBarChart2], ['/analytics', 'Analytics', BarChart3], ['/knowledge', 'Company knowledge', FileText]] },
+    { label:'Platform', items:[['/platform-admin', 'Platform admin', ShieldCheck]] },
+  ];
+}
 
 const transactions = [
-  ['TX-84921','Northstar Market','Maya Chen','1,284.00','Captured','Today, 09:42','Visa 鈥⑩€⑩€⑩€� 4920'],
-  ['TX-84920','Solace Studio','Noah Williams','348.50','Captured','Today, 09:38','Amex 鈥⑩€⑩€⑩€� 1098'],
-  ['TX-84919','Kite Supply Co.','Elena Rossi','2,100.00','Review','Today, 09:31','Visa 鈥⑩€⑩€⑩€� 7721'],
-  ['TX-84918','Morrow Health','Liam Patel','89.00','Refunded','Today, 09:24','Mastercard 鈥⑩€⑩€⑩€� 1833'],
-  ['TX-84917','Tide & Timber','Ava Morgan','612.75','Captured','Today, 09:19','Visa 鈥⑩€⑩€⑩€� 4108'],
-  ['TX-84916','Orchard Works','Oliver Jones','4,890.00','Captured','Today, 09:11','Visa 鈥⑩€⑩€⑩€� 2044'],
-  ['TX-84915','Kindred Home','Sophia Kim','176.20','Failed','Today, 08:57','Mastercard 鈥⑩€⑩€⑩€� 8114'],
-  ['TX-84914','Pollen Goods','James Park','920.00','Captured','Today, 08:52','Visa 鈥⑩€⑩€⑩€� 3901'],
+  ['TX-84921','Northstar Market','Maya Chen','1,284.00','Captured','Today, 09:42','Visa 閳モ懇鈧懇鈧懇鈧拷 4920'],
+  ['TX-84920','Solace Studio','Noah Williams','348.50','Captured','Today, 09:38','Amex 閳モ懇鈧懇鈧懇鈧拷 1098'],
+  ['TX-84919','Kite Supply Co.','Elena Rossi','2,100.00','Review','Today, 09:31','Visa 閳モ懇鈧懇鈧懇鈧拷 7721'],
+  ['TX-84918','Morrow Health','Liam Patel','89.00','Refunded','Today, 09:24','Mastercard 閳モ懇鈧懇鈧懇鈧拷 1833'],
+  ['TX-84917','Tide & Timber','Ava Morgan','612.75','Captured','Today, 09:19','Visa 閳モ懇鈧懇鈧懇鈧拷 4108'],
+  ['TX-84916','Orchard Works','Oliver Jones','4,890.00','Captured','Today, 09:11','Visa 閳モ懇鈧懇鈧懇鈧拷 2044'],
+  ['TX-84915','Kindred Home','Sophia Kim','176.20','Failed','Today, 08:57','Mastercard 閳モ懇鈧懇鈧懇鈧拷 8114'],
+  ['TX-84914','Pollen Goods','James Park','920.00','Captured','Today, 08:52','Visa 閳モ懇鈧懇鈧懇鈧拷 3901'],
 ];
 
 const customers = [
@@ -233,6 +317,8 @@ function TinyBars({ color = '#8b5cf6' }: { color?: string }) {
 function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }) {
   const { employees: roster } = useEmployees();
   const platform = usePlatform();
+  const isOwner = isPlatformOwner(platform.user.email);
+  const navGroups = useMemo(() => getNavGroups(isOwner), [isOwner]);
   const [location, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -243,10 +329,10 @@ function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }
   const go = (path:string) => { setLocation(path); setMobileOpen(false); };
   const currentLabel = location === '/' ? 'Overview' : location.split('/').filter(Boolean).map(s=>s.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')).join(' / ');
   const globalResults = [
-    ...platform.transactions.map((item) => ({ path: '/transactions', label: `${item.id} 路 ${item.merchant}`, detail: `$${item.amount.toLocaleString()} 路 ${item.status}` })),
-    ...platform.customers.map((item) => ({ path: '/customers', label: item.name, detail: `${item.email} 路 ${item.merchant}` })),
-    ...platform.merchants.map((item) => ({ path: '/merchants', label: item.name, detail: `${item.segment} 路 ${item.health}` })),
-    ...platform.reports.map((item) => ({ path: '/reports', label: item.name, detail: `${item.type} 路 ${item.status}` })),
+    ...platform.transactions.map((item) => ({ path: '/transactions', label: `${item.id} 璺� ${item.merchant}`, detail: `$${item.amount.toLocaleString()} 璺� ${item.status}` })),
+    ...platform.customers.map((item) => ({ path: '/customers', label: item.name, detail: `${item.email} 璺� ${item.merchant}` })),
+    ...platform.merchants.map((item) => ({ path: '/merchants', label: item.name, detail: `${item.segment} 璺� ${item.health}` })),
+    ...platform.reports.map((item) => ({ path: '/reports', label: item.name, detail: `${item.type} 璺� ${item.status}` })),
   ];
   const filteredCommands = [...navGroups.flatMap(g=>g.items.map(([path,label])=>({path:path as string,label:label as string,detail:'Navigate'}))), ...roster.map(e=>({path:`/ai-employees/${e.id}/details`,label:e.name,detail:e.role})), ...globalResults].filter(x=>`${x.label} ${x.detail}`.toLowerCase().includes(query.toLowerCase()));
   return <div className="noise app-shell flex">
@@ -274,7 +360,7 @@ function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }
       <header className="sticky top-0 z-20 flex h-[73px] items-center gap-3 border-b border-[#172c40] bg-[#090b18]/90 px-4 backdrop-blur-xl md:px-8">
         <button className="mr-1 rounded-md p-2 text-[#9ab0c3] hover:bg-[#142a3b] md:hidden" onClick={()=>setMobileOpen(true)} data-testid="button-open-mobile-nav"><Menu size={20}/></button>
         <div className="min-w-0 flex-1"><div className="kicker mb-1">{location.includes('/ai-employees')?'AI workforce':'FinOS command center'}</div><div className="display-font truncate text-[17px] font-semibold text-[#f8fafc]">{currentLabel}</div></div>
-        <button onClick={()=>setCommandOpen(true)} className="hidden h-9 w-[220px] items-center gap-2 rounded-lg border border-[#203b50] bg-[#0c1b2b] px-3 text-left text-[12px] text-[#6f879c] sm:flex" data-testid="button-open-command"><Search size={15}/><span>Search anything...</span><span className="mono ml-auto rounded border border-[#29445a] px-1.5 py-0.5 text-[9px]">鈱� K</span></button>
+        <button onClick={()=>setCommandOpen(true)} className="hidden h-9 w-[220px] items-center gap-2 rounded-lg border border-[#203b50] bg-[#0c1b2b] px-3 text-left text-[12px] text-[#6f879c] sm:flex" data-testid="button-open-command"><Search size={15}/><span>Search anything...</span><span className="mono ml-auto rounded border border-[#29445a] px-1.5 py-0.5 text-[9px]">閳憋拷 K</span></button>
         <button onClick={()=>setCommandOpen(true)} className="rounded-lg p-2 text-[#8ba1b4] hover:bg-[#142a3b] sm:hidden" data-testid="button-open-search"><Search size={18}/></button>
          <button onClick={()=>setNotificationsOpen(!notificationsOpen)} className="relative rounded-lg p-2 text-[#8ba1b4] hover:bg-[#142a3b]" data-testid="button-notifications"><Bell size={17}/>{platform.unreadNotifications > 0 && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#ff897a]" />}</button>
         <div className="hidden h-7 w-px bg-[#203447] sm:block" />
@@ -283,7 +369,7 @@ function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }
        {notificationsOpen&&<div className="absolute right-5 top-[63px] z-30 w-[310px] rounded-xl border border-[#29465d] bg-[#0d1e30] p-4 shadow-2xl" data-testid="panel-notifications"><div className="mb-3 flex items-center justify-between"><span className="font-semibold text-[#e6f1f6]">Notifications</span><Link href="/notifications" onClick={()=>setNotificationsOpen(false)} className="text-[10px] text-[#8b5cf6]">View all</Link></div>{platform.notifications.slice(0,3).map((item)=><button key={item.id} onClick={()=>{platform.markNotificationRead(item.id);setNotificationsOpen(false);setLocation('/notifications')}} className="mb-3 block w-full border-l-2 border-[#8b5cf6] py-1 pl-3 text-left last:mb-0"><div className="text-[12px] text-[#d9e9ef]">{item.title}</div><div className="mt-1 text-[10px] text-[#758da2]">{item.time}</div></button>)}</div>}
       <main className="min-w-0 flex-1 px-4 py-7 md:px-8 lg:px-10">{children}</main>
     </div>
-     {commandOpen&&<div className="fixed inset-0 z-50 flex items-start justify-center bg-[#050611]/75 px-4 pt-[13vh]" onMouseDown={()=>setCommandOpen(false)}><div className="w-full max-w-[620px] overflow-hidden rounded-2xl border border-[#4a3a78] bg-[#0d1020] shadow-2xl" onMouseDown={e=>e.stopPropagation()} data-testid="dialog-command"><div className="flex items-center gap-3 border-b border-[#203b50] px-5 py-4"><Search size={18} className="text-[#8b5cf6]"/><input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search pages, payments, customers, merchants..." className="flex-1 bg-transparent text-sm text-[#e7f3f7] outline-none" data-testid="input-command-search"/><button onClick={()=>setCommandOpen(false)} className="rounded bg-[#172d40] px-2 py-1 text-[10px] text-[#8ca4b8]">ESC</button></div><div className="max-h-[390px] overflow-y-auto p-2">{filteredCommands.length?filteredCommands.map((item,index)=><button key={`${item.path}-${item.label}-${index}`} onClick={()=>{go(item.path);setCommandOpen(false);setQuery('')}} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] text-[#c5d5e0] hover:bg-[#173448]" data-testid={`command-${item.path.replaceAll('/','-')}-${index}`}><span className="flex items-center gap-3"><Command size={14} className="text-[#5c8295]"/><span><span className="block">{item.label}</span><span className="mt-0.5 block text-[10px] text-[#6f899c]">{item.detail}</span></span></span><ChevronRight size={14} className="text-[#55748b]"/></button>):<div className="px-3 py-10 text-center text-sm text-[#71899d]">No matching records</div>}</div><div className="flex items-center gap-4 border-t border-[#203b50] px-5 py-3 text-[10px] text-[#71899d]"><span><kbd className="rounded border border-[#2b485b] px-1">鈱� K</kbd> open search</span><span><kbd className="rounded border border-[#2b485b] px-1">ESC</kbd> close</span></div></div></div>}
+     {commandOpen&&<div className="fixed inset-0 z-50 flex items-start justify-center bg-[#050611]/75 px-4 pt-[13vh]" onMouseDown={()=>setCommandOpen(false)}><div className="w-full max-w-[620px] overflow-hidden rounded-2xl border border-[#4a3a78] bg-[#0d1020] shadow-2xl" onMouseDown={e=>e.stopPropagation()} data-testid="dialog-command"><div className="flex items-center gap-3 border-b border-[#203b50] px-5 py-4"><Search size={18} className="text-[#8b5cf6]"/><input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search pages, payments, customers, merchants..." className="flex-1 bg-transparent text-sm text-[#e7f3f7] outline-none" data-testid="input-command-search"/><button onClick={()=>setCommandOpen(false)} className="rounded bg-[#172d40] px-2 py-1 text-[10px] text-[#8ca4b8]">ESC</button></div><div className="max-h-[390px] overflow-y-auto p-2">{filteredCommands.length?filteredCommands.map((item,index)=><button key={`${item.path}-${item.label}-${index}`} onClick={()=>{go(item.path);setCommandOpen(false);setQuery('')}} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] text-[#c5d5e0] hover:bg-[#173448]" data-testid={`command-${item.path.replaceAll('/','-')}-${index}`}><span className="flex items-center gap-3"><Command size={14} className="text-[#5c8295]"/><span><span className="block">{item.label}</span><span className="mt-0.5 block text-[10px] text-[#6f899c]">{item.detail}</span></span></span><ChevronRight size={14} className="text-[#55748b]"/></button>):<div className="px-3 py-10 text-center text-sm text-[#71899d]">No matching records</div>}</div><div className="flex items-center gap-4 border-t border-[#203b50] px-5 py-3 text-[10px] text-[#71899d]"><span><kbd className="rounded border border-[#2b485b] px-1">閳憋拷 K</kbd> open search</span><span><kbd className="rounded border border-[#2b485b] px-1">ESC</kbd> close</span></div></div></div>}
   </div>;
 }
 
@@ -387,7 +473,7 @@ function Dashboard() {
           <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-slate-600"><span>{formatDashboardMoney(metrics.totalVolume)}</span><span>75%</span><span>50%</span><span>25%</span><span>$0</span></div>
           <div className="ml-12 h-full"><div className="flex h-full flex-col justify-between">{[0,1,2,3,4].map(i=><div className="border-t border-dashed border-white/[.06]" key={i}/>)}</div><div className="absolute bottom-5 left-12 right-0 top-0"><Sparkline values={chartValues} color="#8b5cf6" fill/><div className="absolute bottom-[-22px] left-0 right-0 flex justify-between text-[10px] text-slate-600">{['1','2','3','4','5','6','Now'].map(x=><span key={x}>{x}</span>)}</div></div></div>
         </div>
-        <div className="mt-8 flex flex-wrap items-center gap-5 text-[10px] text-slate-500"><span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-violet-400"/>Payment volume</span><span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-emerald-400"/>Captured: {metrics.captured}</span><span className="ml-auto mono text-slate-300">{range} 路 {formatDashboardMoney(metrics.totalVolume)}</span></div>
+        <div className="mt-8 flex flex-wrap items-center gap-5 text-[10px] text-slate-500"><span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-violet-400"/>Payment volume</span><span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-emerald-400"/>Captured: {metrics.captured}</span><span className="ml-auto mono text-slate-300">{range} 璺� {formatDashboardMoney(metrics.totalVolume)}</span></div>
       </div>
 
       <div className="panel p-5 md:p-6">
@@ -401,7 +487,7 @@ function Dashboard() {
       <div className="panel overflow-hidden"><div className="flex items-center justify-between border-b border-white/[.06] px-5 py-4"><div><div className="kicker mb-1 text-violet-300">Latest activity</div><div className="text-sm font-semibold text-white">Recent transactions</div></div><Link href="/transactions" className="text-[11px] text-violet-300">View all <ChevronRight size={12} className="inline"/></Link></div><div className="scrollbar overflow-x-auto"><table className="w-full min-w-[620px] text-left"><thead><tr className="border-b border-white/[.05] text-[10px] uppercase tracking-[.12em] text-slate-600"><th className="px-5 py-3 font-medium">Transaction</th><th className="px-3 py-3 font-medium">Merchant</th><th className="px-3 py-3 font-medium">Amount</th><th className="px-3 py-3 font-medium">Status</th><th className="px-5 py-3 text-right font-medium">Time</th></tr></thead><tbody>{tenantTransactions.slice(0,6).map(tx=><tr className="table-row border-b border-white/[.04] text-[12px]" key={tx.id}><td className="px-5 py-3.5"><span className="mono text-[10px] text-violet-300">{tx.id}</span></td><td className="px-3 py-3.5 text-slate-200">{tx.merchant}</td><td className="mono px-3 py-3.5 text-slate-100">${tx.amount.toLocaleString()}</td><td className="px-3 py-3.5"><Status>{tx.status}</Status></td><td className="px-5 py-3.5 text-right text-slate-500">{tx.time}</td></tr>)}</tbody></table></div></div>
 
       <div className="panel p-5 md:p-6"><div className="mb-5 flex items-end justify-between"><div><div className="kicker mb-1 text-violet-300">Merchant health</div><div className="text-sm font-semibold text-white">Portfolio pulse</div></div><Link href="/merchants" className="text-[11px] text-violet-300">Details <ChevronRight size={12} className="inline"/></Link></div>
-        <div className="flex items-center gap-5"><div className="relative h-28 w-28 shrink-0 rounded-full" style={{background:`conic-gradient(#34d399 0 ${metrics.merchantHealthRate}%, #fbbf24 ${metrics.merchantHealthRate}% ${metrics.merchantHealthRate + (tenantMerchants.length ? metrics.reviewMerchants / tenantMerchants.length * 100 : 0)}%, #fb7185 0 100%)`}}><div className="absolute inset-[9px] grid place-items-center rounded-full bg-[#0d1020]"><div className="text-2xl font-semibold text-white">{metrics.merchantHealthRate.toFixed(0)}%</div></div></div><div className="space-y-2.5 text-[11px] text-slate-400"><div>鈼� Healthy <b className="text-slate-200">{metrics.healthyMerchants}</b></div><div>鈼� Review <b className="text-slate-200">{metrics.reviewMerchants}</b></div><div>鈼� At risk <b className="text-slate-200">{metrics.atRiskMerchants}</b></div></div></div>
+        <div className="flex items-center gap-5"><div className="relative h-28 w-28 shrink-0 rounded-full" style={{background:`conic-gradient(#34d399 0 ${metrics.merchantHealthRate}%, #fbbf24 ${metrics.merchantHealthRate}% ${metrics.merchantHealthRate + (tenantMerchants.length ? metrics.reviewMerchants / tenantMerchants.length * 100 : 0)}%, #fb7185 0 100%)`}}><div className="absolute inset-[9px] grid place-items-center rounded-full bg-[#0d1020]"><div className="text-2xl font-semibold text-white">{metrics.merchantHealthRate.toFixed(0)}%</div></div></div><div className="space-y-2.5 text-[11px] text-slate-400"><div>閳硷拷 Healthy <b className="text-slate-200">{metrics.healthyMerchants}</b></div><div>閳硷拷 Review <b className="text-slate-200">{metrics.reviewMerchants}</b></div><div>閳硷拷 At risk <b className="text-slate-200">{metrics.atRiskMerchants}</b></div></div></div>
         <div className="my-5 h-px bg-white/[.06]"/><div className="grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-white/[.025] p-3"><div className="text-lg font-semibold text-white">{tenantCustomers.length}</div><div className="text-[9px] uppercase tracking-wider text-slate-600">Customers</div></div><div className="rounded-lg bg-white/[.025] p-3"><div className="text-lg font-semibold text-white">{metrics.review}</div><div className="text-[9px] uppercase tracking-wider text-slate-600">Review</div></div><div className="rounded-lg bg-white/[.025] p-3"><div className="text-lg font-semibold text-white">{metrics.refunded}</div><div className="text-[9px] uppercase tracking-wider text-slate-600">Refunded</div></div></div>
       </div>
     </div>
@@ -485,7 +571,7 @@ function EmployeeForm({ employee, onClose }: { employee?: Employee; onClose: () 
       <label><span className="kicker mb-2 block">System prompt</span><textarea value={draft.systemPrompt} onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })} className="input-dark min-h-[90px] w-full resize-none rounded-lg px-3 py-2 text-sm" placeholder="Define how this employee should reason and respond..." data-testid="textarea-employee-system-prompt"/></label>
       <div className="grid gap-4 sm:grid-cols-3">
         <label><span className="kicker mb-2 block">AI personality</span><input value={draft.personality} onChange={(e) => setDraft({ ...draft, personality: e.target.value })} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="Precise and warm" data-testid="input-employee-personality"/></label>
-        <label><span className="kicker mb-2 block">Avatar</span><input value={draft.avatar} onChange={(e) => setDraft({ ...draft, avatar: e.target.value })} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="鉁� or emoji" data-testid="input-employee-avatar"/></label>
+        <label><span className="kicker mb-2 block">Avatar</span><input value={draft.avatar} onChange={(e) => setDraft({ ...draft, avatar: e.target.value })} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="閴侊拷 or emoji" data-testid="input-employee-avatar"/></label>
         <label><span className="kicker mb-2 block">Color</span><input type="color" value={draft.color} onChange={(e) => setDraft({ ...draft, color: e.target.value })} className="input-dark h-10 w-full cursor-pointer rounded-lg px-2" data-testid="input-employee-color"/></label>
       </div>
       <div><span className="kicker mb-2 block">Permissions</span><div className="grid gap-2 sm:grid-cols-2">{builderPermissions.map((permission) => <label key={permission} className="flex items-center gap-2 rounded-lg border border-[#2b1d52] bg-[#0b0e1b] px-3 py-2 text-[11px] text-[#a9bfcc]"><input type="checkbox" checked={draft.permissions.includes(permission)} onChange={(e) => setDraft({ ...draft, permissions: e.target.checked ? [...draft.permissions, permission] : draft.permissions.filter((item) => item !== permission) })} className="accent-[#8b5cf6]" data-testid={`checkbox-permission-${permission.replace(':', '-')}`}/><span>{permission}</span></label>)}</div></div>
@@ -570,11 +656,11 @@ function EmployeeDetailsPage({ employee }: { employee: Employee }) {
     },
     {
       title: 'Knowledge',
-      detail: liveEmployee.knowledge.length ? liveEmployee.knowledge.join(' 路 ') : 'Knowledge sources will appear here when connected.',
+      detail: liveEmployee.knowledge.length ? liveEmployee.knowledge.join(' 璺� ') : 'Knowledge sources will appear here when connected.',
     },
     {
       title: 'Tools',
-      detail: liveEmployee.tools?.length ? liveEmployee.tools.join(' 路 ') : 'Tool access will appear here when configured.',
+      detail: liveEmployee.tools?.length ? liveEmployee.tools.join(' 璺� ') : 'Tool access will appear here when configured.',
     },
   ];
   return <div className="mx-auto max-w-[1200px]">
@@ -585,8 +671,8 @@ function EmployeeDetailsPage({ employee }: { employee: Employee }) {
           <div className="kicker mb-2">AI workforce / employee details</div>
           <h1 className="display-font truncate text-[30px] font-semibold tracking-[-.04em] text-[#f8fafc]">{liveEmployee.name}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-[#8299ab]">
-            <span>{liveEmployee.role}</span><span className="text-[#3c566d]">鈥�</span><span>{liveEmployee.department}</span>
-            <span className="text-[#3c566d]">鈥�</span><span className="flex items-center gap-1.5" style={{ color: liveEmployee.color }}><span className={`live-dot h-1.5 w-1.5 rounded-full ${liveEmployee.active ? '' : 'opacity-30'}`} style={{ background: liveEmployee.color }}/>{status}</span>
+            <span>{liveEmployee.role}</span><span className="text-[#3c566d]">閳ワ拷</span><span>{liveEmployee.department}</span>
+            <span className="text-[#3c566d]">閳ワ拷</span><span className="flex items-center gap-1.5" style={{ color: liveEmployee.color }}><span className={`live-dot h-1.5 w-1.5 rounded-full ${liveEmployee.active ? '' : 'opacity-30'}`} style={{ background: liveEmployee.color }}/>{status}</span>
           </div>
         </div>
       </div>
@@ -644,8 +730,8 @@ function AIWorkspace({ employee }: { employee:Employee }) {
   const { name, role, department, initials, color, accent, status, active, metric, metricLabel, description, tasks, skills, performance, lastActive } = liveEmployee;
   const send=()=>{if(!message.trim())return;setSent([...sent,message]);setMessage('');toast.success(`${employee.name} received your instruction`);};
   return <div className="mx-auto max-w-[1320px]">
-      <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div className="flex items-start gap-4"><div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-[14px] font-bold" style={{background:`${accent}25`,color,border:`1px solid ${accent}66`}}>{liveEmployee.avatar || initials}</div><div><div className="kicker mb-2">AI employee / profile</div><h1 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#f8fafc]">{name}</h1><div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[#8299ab]"><span className={`live-dot h-1.5 w-1.5 rounded-full ${active?'':'opacity-30'}`} style={{background:color}}/>{role} <span className="text-[#3c566d]">鈥�</span><span style={{color}}>{active ? status : 'Paused'}</span><span className="text-[#3c566d]">鈥�</span><span>{department}</span></div></div></div><div className="flex flex-wrap gap-2"><button onClick={() => setEditing(true)} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-edit-profile"><Pencil size={14}/> Edit profile</button><button onClick={() => { toggleEmployee(employee.id); toast.success(`${name} ${active ? 'deactivated' : 'activated'}`); }} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-toggle-profile"><Power size={14}/>{active ? 'Deactivate' : 'Activate'}</button><button onClick={()=>{setRunning(true);setTimeout(()=>setRunning(false),900);toast.success(`${name} is reviewing the latest context`)}} className="btn-primary flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-run-ai"><Sparkles size={14}/>{running?'Working...':'Ask for an update'}</button></div></div>
-    <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[#1a3246]"><button onClick={()=>setActiveTab('Overview')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Overview'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Overview</button><button onClick={()=>setActiveTab('Tasks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Tasks'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-profile-tasks-tab">Tasks</button><button onClick={()=>setActiveTab('Calendar')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Calendar'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-calendar-tab">Calendar</button><button onClick={()=>setActiveTab('Chat')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Chat'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-chat-tab">AI chat</button><button onClick={()=>setActiveTab('Analytics')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Analytics'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-analytics-tab">Analytics</button><button onClick={()=>setActiveTab('Activity')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Activity'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-activity-tab">Activity</button><button onClick={()=>setActiveTab('Playbooks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Playbooks'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-playbooks-tab">Playbooks</button><button onClick={()=>setActiveTab('Reports')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Reports'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-reports-tab">Reports</button><button onClick={()=>setActiveTab('Notifications')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Notifications'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-notifications-tab">Notifications</button><button onClick={()=>setActiveTab('Permissions')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Permissions'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-permissions-tab">Permissions</button><button onClick={()=>setActiveTab('Settings')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Settings'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-settings-tab">Settings</button></div>
+      <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div className="flex items-start gap-4"><div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-[14px] font-bold" style={{background:`${accent}25`,color,border:`1px solid ${accent}66`}}>{liveEmployee.avatar || initials}</div><div><div className="kicker mb-2">AI employee / profile</div><h1 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#f8fafc]">{name}</h1><div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[#8299ab]"><span className={`live-dot h-1.5 w-1.5 rounded-full ${active?'':'opacity-30'}`} style={{background:color}}/>{role} <span className="text-[#3c566d]">閳ワ拷</span><span style={{color}}>{active ? status : 'Paused'}</span><span className="text-[#3c566d]">閳ワ拷</span><span>{department}</span></div></div></div><div className="flex flex-wrap gap-2"><button onClick={() => setEditing(true)} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-edit-profile"><Pencil size={14}/> Edit profile</button><button onClick={() => { toggleEmployee(employee.id); toast.success(`${name} ${active ? 'deactivated' : 'activated'}`); }} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-toggle-profile"><Power size={14}/>{active ? 'Deactivate' : 'Activate'}</button><button onClick={()=>{setRunning(true);setTimeout(()=>setRunning(false),900);toast.success(`${name} is reviewing the latest context`)}} className="btn-primary flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-run-ai"><Sparkles size={14}/>{running?'Working...':'Ask for an update'}</button></div></div>
+    <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[#1a3246]"><button onClick={()=>setActiveTab('Overview')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Overview'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Overview</button><button onClick={()=>setActiveTab('Tasks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Tasks'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-profile-tasks-tab">Tasks</button><button onClick={()=>setActiveTab('Calendar')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Calendar'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-calendar-tab">Calendar</button><button onClick={()=>setActiveTab('Chat')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Chat'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-chat-tab">AI chat</button><button onClick={()=>setActiveTab('Analytics')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Analytics'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-analytics-tab">Analytics</button><button onClick={()=>setActiveTab('Activity')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Activity'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-activity-tab">Activity</button><button onClick={()=>setActiveTab('Playbooks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Playbooks'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-playbooks-tab">Playbooks</button><button onClick={()=>setActiveTab('Reports')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Reports'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-reports-tab">Reports</button><button onClick={()=>setActiveTab('Notifications')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Notifications'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-notifications-tab">Notifications</button><button onClick={()=>setActiveTab('Permissions')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Permissions'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-permissions-tab">Permissions</button><button onClick={()=>setActiveTab('Settings')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Settings'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-settings-tab">Settings</button>{liveEmployee.department === 'Human resources' && <button onClick={()=>setActiveTab('HR')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='HR'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>HR memory & communication</button>}</div>
     {activeTab==='Calendar' ? <EmployeeCalendarPanel employee={liveEmployee} day={calendarDay} setDay={setCalendarDay}/> :
       activeTab==='Chat' ? <EmployeeChatPanel employee={liveEmployee} message={message} setMessage={setMessage} sent={sent} send={send} notifications={notifications} setNotifications={setNotifications}/> :
       activeTab==='Analytics' ? <EmployeeAnalyticsPanel employee={liveEmployee}/> :
@@ -653,11 +739,26 @@ function AIWorkspace({ employee }: { employee:Employee }) {
       activeTab==='Notifications' ? <EmployeeNotificationsPanel employee={liveEmployee} notifications={notifications} setNotifications={setNotifications}/> :
       activeTab==='Permissions' ? <EmployeePermissionsPanel employee={liveEmployee}/> :
       activeTab==='Settings' ? <EmployeeSettingsPanel employee={liveEmployee} notifications={notifications} setNotifications={setNotifications}/> :
+      activeTab==='HR' ? <HRMemoryPanel employee={liveEmployee}/> :
       activeTab==='Playbooks' ? <div className="panel p-6"><div className="kicker mb-2">Playbooks</div><h2 className="display-font text-xl font-semibold text-[#f1f5f9]">Reusable operating patterns.</h2><p className="mt-2 max-w-lg text-sm leading-6 text-[#8198aa]">Build and save playbooks for repeatable work. Every run remains visible in the activity timeline.</p><div className="mt-6 grid gap-3 md:grid-cols-2">{['Morning context scan','Exception triage','Weekly operating summary','Escalation review'].map((item,i)=><button key={item} onClick={()=>toast.success(`${item} queued for ${name}`)} className="rounded-lg border border-[#203c50] bg-[#0c1020] p-4 text-left text-sm text-[#b8cad5] hover:border-[#35667b]" data-testid={`button-playbook-${i}`}><div className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-md bg-[#173746] text-[10px] text-[#64d8e5]">{i+1}</span>{item}</div><div className="mt-2 text-[11px] text-[#718b9f]">Last run {i+2}h ago <span className="float-right text-[#34d399]">Healthy</span></div></button>)}</div></div> :
       activeTab==='Activity' ? <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]"><ActivityTimeline employee={liveEmployee}/><PerformancePanel employee={liveEmployee}/></div> :
       activeTab==='Tasks' ? <TaskManager employee={liveEmployee} tasks={tasks} taskFilter={taskFilter} setTaskFilter={setTaskFilter} completed={completed} setCompleted={setCompleted} history={taskHistory} setHistory={setTaskHistory}/> :
-      <><div className="grid gap-4 md:grid-cols-3"><div className="panel p-5 md:col-span-2"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Current focus</div><div className="text-sm font-semibold text-[#dfedf1]">{tasks[0]}</div></div><span className="status-pill border-[#167d5a] bg-[#0d3b2c] text-[#6fe0bd]">In progress</span></div><div className="mb-5 h-2 overflow-hidden rounded-full bg-[#142c3e]"><div className="h-full rounded-full" style={{width:'72%',background:color}}/></div><div className="flex justify-between text-[10px] text-[#718b9f]"><span>Context gathered</span><span style={{color}}>72% confidence</span></div><div className="mt-6 rounded-lg border border-[#213c4e] bg-[#0a1827] p-4 text-[12px] leading-5 text-[#95aebe]"><span className="font-semibold" style={{color}}>Observation:</span> {name} sees a stable operating picture with one exception that may benefit from a human decision.</div></div><div className="panel p-5"><div className="kicker mb-1">Primary metric</div><div className="display-font mt-2 text-[30px] font-semibold" style={{color}}>{metric}</div><div className="mt-1 text-[11px] text-[#7891a4]">{metricLabel}</div><div className="mt-6 h-16"><Sparkline values={[35,42,38,54,48,66,60,72,68,85,78,91]} color={color} fill/></div><div className="mt-3 flex justify-between text-[10px] text-[#718b9f]"><span>7 days ago</span><span>Today</span></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><TaskManager employee={liveEmployee} tasks={tasks} taskFilter="Open" setTaskFilter={setTaskFilter} completed={completed} setCompleted={setCompleted} history={taskHistory} setHistory={setTaskHistory}/><div className="panel flex min-h-[260px] flex-col p-5"><div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><MessageSquare size={15} style={{color}}/><div className="kicker">Talk to {name}</div></div><button onClick={()=>{setNotifications(!notifications);toast.info(`Notifications ${notifications?'muted':'enabled'}`)}} className={`rounded-md p-1.5 ${notifications?'text-[#8b5cf6]':'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-employee-notifications"><Bell size={14}/></button></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I鈥檓 tracking the operation. What would you like me to look into?</p>{sent.slice(-2).map((m,i)=><p key={i} className="ml-5 rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{m}</p>)}{sent.length>0&&<p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I鈥檒l add that to my current review and report back with evidence.</p>}</div><div className="mt-4 flex gap-2"><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} className="input-dark h-9 min-w-0 flex-1 rounded-lg px-3 text-[11px]" placeholder="Give an instruction..." data-testid={`input-message-${employee.id}`}/><button onClick={send} className="btn-primary grid h-9 w-9 place-items-center rounded-lg" data-testid={`button-send-${employee.id}`}><Send size={14}/></button></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[.9fr_1.1fr]"><PerformancePanel employee={liveEmployee}/><ActivityTimeline employee={liveEmployee}/></div></>}
+      <><div className="grid gap-4 md:grid-cols-3"><div className="panel p-5 md:col-span-2"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Current focus</div><div className="text-sm font-semibold text-[#dfedf1]">{tasks[0]}</div></div><span className="status-pill border-[#167d5a] bg-[#0d3b2c] text-[#6fe0bd]">In progress</span></div><div className="mb-5 h-2 overflow-hidden rounded-full bg-[#142c3e]"><div className="h-full rounded-full" style={{width:'72%',background:color}}/></div><div className="flex justify-between text-[10px] text-[#718b9f]"><span>Context gathered</span><span style={{color}}>72% confidence</span></div><div className="mt-6 rounded-lg border border-[#213c4e] bg-[#0a1827] p-4 text-[12px] leading-5 text-[#95aebe]"><span className="font-semibold" style={{color}}>Observation:</span> {name} sees a stable operating picture with one exception that may benefit from a human decision.</div></div><div className="panel p-5"><div className="kicker mb-1">Primary metric</div><div className="display-font mt-2 text-[30px] font-semibold" style={{color}}>{metric}</div><div className="mt-1 text-[11px] text-[#7891a4]">{metricLabel}</div><div className="mt-6 h-16"><Sparkline values={[35,42,38,54,48,66,60,72,68,85,78,91]} color={color} fill/></div><div className="mt-3 flex justify-between text-[10px] text-[#718b9f]"><span>7 days ago</span><span>Today</span></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><TaskManager employee={liveEmployee} tasks={tasks} taskFilter="Open" setTaskFilter={setTaskFilter} completed={completed} setCompleted={setCompleted} history={taskHistory} setHistory={setTaskHistory}/><div className="panel flex min-h-[260px] flex-col p-5"><div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><MessageSquare size={15} style={{color}}/><div className="kicker">Talk to {name}</div></div><button onClick={()=>{setNotifications(!notifications);toast.info(`Notifications ${notifications?'muted':'enabled'}`)}} className={`rounded-md p-1.5 ${notifications?'text-[#8b5cf6]':'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-employee-notifications"><Bell size={14}/></button></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I閳ユ獡 tracking the operation. What would you like me to look into?</p>{sent.slice(-2).map((m,i)=><p key={i} className="ml-5 rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{m}</p>)}{sent.length>0&&<p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I閳ユ獟l add that to my current review and report back with evidence.</p>}</div><div className="mt-4 flex gap-2"><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} className="input-dark h-9 min-w-0 flex-1 rounded-lg px-3 text-[11px]" placeholder="Give an instruction..." data-testid={`input-message-${employee.id}`}/><button onClick={send} className="btn-primary grid h-9 w-9 place-items-center rounded-lg" data-testid={`button-send-${employee.id}`}><Send size={14}/></button></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[.9fr_1.1fr]"><PerformancePanel employee={liveEmployee}/><ActivityTimeline employee={liveEmployee}/></div></>}
     {editing && <EmployeeForm employee={liveEmployee} onClose={() => setEditing(false)}/>}</div>;
+}
+
+function HRMemoryPanel({ employee }: { employee: Employee }) {
+  const key = `finos:hr-memory:${employee.id}`;
+  const [memory, setMemory] = useState(() => {
+    try { return localStorage.getItem(key) || `Role: ${employee.role}\nDepartment: ${employee.department}\nInterview framework: define role competencies, behavioral evidence, technical evidence, scorecard, and escalation criteria.\nEvaluation style: evidence-based, consistent, human-review required.`; } catch { return ''; }
+  });
+  const [saved, setSaved] = useState(false);
+  const save = () => { localStorage.setItem(key, memory); setSaved(true); toast.success('HR employee memory saved'); setTimeout(() => setSaved(false), 1200); };
+  if (employee.department !== 'Human resources' && employee.role.toLowerCase() !== 'hr') return <div className="panel p-6"><div className="kicker mb-2">HR only</div><div className="text-sm text-[#9ab0bd]">This memory and interview communication area is available only to the HR employee.</div></div>;
+  return <div className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+    <div className="panel p-5 md:p-6"><div className="kicker mb-1">HR employee memory</div><div className="text-sm font-semibold text-[#deedf1]">Persistent job knowledge & interview rubric</div><p className="mt-2 text-[11px] leading-5 text-[#7892a5]">Store role-specific operating context so HR can evaluate interviews consistently. This is local workspace memory until a server memory service is connected.</p><textarea value={memory} onChange={(event) => setMemory(event.target.value)} className="input-dark mt-4 min-h-[240px] w-full resize-y rounded-lg px-3 py-3 text-xs leading-5" data-testid="textarea-hr-memory"/><button onClick={save} className="btn-primary mt-3 rounded-lg px-4 py-2.5 text-xs" data-testid="button-save-hr-memory">{saved ? 'Saved' : 'Save HR memory'}</button></div>
+    <div className="panel p-5 md:p-6"><div className="kicker mb-1">Human communication</div><div className="text-sm font-semibold text-[#deedf1]">Visual + audio readiness</div><div className="mt-4 space-y-3"><div className="rounded-lg bg-[#0c1020] p-4"><div className="text-[12px] text-[#dbe8ed]">Camera</div><div className="mt-1 text-[10px] text-[#718b9f]">UI permission hook ready; production video requires WebRTC/provider wiring.</div><button onClick={() => toast.info('Camera permission flow can be connected to the HR video provider')} className="btn-quiet mt-3 rounded-lg px-3 py-2 text-[10px]">Test camera</button></div><div className="rounded-lg bg-[#0c1020] p-4"><div className="text-[12px] text-[#dbe8ed]">Microphone</div><div className="mt-1 text-[10px] text-[#718b9f]">UI permission hook ready; production audio requires browser permission and provider wiring.</div><button onClick={() => toast.info('Microphone permission flow can be connected to the HR voice provider')} className="btn-quiet mt-3 rounded-lg px-3 py-2 text-[10px]">Test microphone</button></div></div></div>
+  </div>;
 }
 
 function EmployeeCalendarPanel({ employee, day, setDay }: { employee: Employee; day: string; setDay: (value: string) => void }) {
@@ -667,13 +768,13 @@ function EmployeeCalendarPanel({ employee, day, setDay }: { employee: Employee; 
     ['Friday', employee.tasks[2], '14:00', '#f6c76d'],
   ];
   return <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
-    <div className="panel p-5"><div className="kicker mb-1">Calendar</div><div className="text-sm font-semibold text-[#deedf1]">Upcoming schedule</div><div className="mt-5 grid grid-cols-3 gap-2">{['Today', 'Tomorrow', 'Friday'].map((item) => <button key={item} onClick={() => setDay(item)} className={`rounded-lg border px-2 py-3 text-[11px] ${day === item ? 'border-[#438fa1] bg-[#153743] text-[#a78bfa]' : 'border-[#30235d] text-[#7892a5]'}`}>{item}</button>)}</div><div className="mt-5 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="text-[11px] text-[#7892a5]">Next focus</div><div className="mt-2 text-sm font-medium text-[#e2e8f0]">{events.find((event) => event[0] === day)?.[1]}</div><div className="mt-2 text-[11px] text-[#8b5cf6]">{events.find((event) => event[0] === day)?.[2]} 路 {day}</div></div></div>
-    <div className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Scheduled work</div><div className="text-sm font-semibold text-[#deedf1]">{employee.role} calendar</div></div><CalendarDays size={16} className="text-[#668ba0]"/></div><div className="space-y-3">{events.map(([eventDay, label, time, eventColor]) => <button key={eventDay} onClick={() => { setDay(eventDay); toast.info(`${label} opened for review`); }} className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left ${day === eventDay ? 'border-[#315b6c] bg-[#102b38]' : 'border-transparent bg-[#0c1020]'}`}><span className="h-8 w-1 rounded-full" style={{ background: eventColor }} /><span className="flex-1"><span className="block text-[12px] text-[#d5e5eb]">{label}</span><span className="mt-1 block text-[10px] text-[#718b9f]">{eventDay} 路 {time}</span></span><ChevronRight size={14} className="text-[#55748b]"/></button>)}</div></div>
+    <div className="panel p-5"><div className="kicker mb-1">Calendar</div><div className="text-sm font-semibold text-[#deedf1]">Upcoming schedule</div><div className="mt-5 grid grid-cols-3 gap-2">{['Today', 'Tomorrow', 'Friday'].map((item) => <button key={item} onClick={() => setDay(item)} className={`rounded-lg border px-2 py-3 text-[11px] ${day === item ? 'border-[#438fa1] bg-[#153743] text-[#a78bfa]' : 'border-[#30235d] text-[#7892a5]'}`}>{item}</button>)}</div><div className="mt-5 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="text-[11px] text-[#7892a5]">Next focus</div><div className="mt-2 text-sm font-medium text-[#e2e8f0]">{events.find((event) => event[0] === day)?.[1]}</div><div className="mt-2 text-[11px] text-[#8b5cf6]">{events.find((event) => event[0] === day)?.[2]} 璺� {day}</div></div></div>
+    <div className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Scheduled work</div><div className="text-sm font-semibold text-[#deedf1]">{employee.role} calendar</div></div><CalendarDays size={16} className="text-[#668ba0]"/></div><div className="space-y-3">{events.map(([eventDay, label, time, eventColor]) => <button key={eventDay} onClick={() => { setDay(eventDay); toast.info(`${label} opened for review`); }} className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left ${day === eventDay ? 'border-[#315b6c] bg-[#102b38]' : 'border-transparent bg-[#0c1020]'}`}><span className="h-8 w-1 rounded-full" style={{ background: eventColor }} /><span className="flex-1"><span className="block text-[12px] text-[#d5e5eb]">{label}</span><span className="mt-1 block text-[10px] text-[#718b9f]">{eventDay} 璺� {time}</span></span><ChevronRight size={14} className="text-[#55748b]"/></button>)}</div></div>
   </div>;
 }
 
 function EmployeeChatPanel({ employee, message, setMessage, sent, send, notifications, setNotifications }: { employee: Employee; message: string; setMessage: (value: string) => void; sent: string[]; send: () => void; notifications: boolean; setNotifications: (value: boolean) => void }) {
-  return <div className="panel mx-auto flex min-h-[420px] max-w-[900px] flex-col p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">AI chat</div><div className="flex items-center gap-2 text-sm font-semibold text-[#deedf1]"><span className="grid h-7 w-7 place-items-center rounded-md text-[10px] font-bold" style={{ background: `${employee.accent}25`, color: employee.color }}>{employee.avatar || employee.initials}</span> Talk to {employee.name}</div></div><button onClick={() => { setNotifications(!notifications); toast.info(`Notifications ${notifications ? 'muted' : 'enabled'}`); }} className={`rounded-md p-2 ${notifications ? 'text-[#8b5cf6]' : 'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-chat-notifications"><Bell size={15}/></button></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="max-w-[80%] rounded-lg rounded-tl-none bg-[#122738] p-3">I鈥檓 ready to help with {employee.role.toLowerCase()} work. What should I review?</p>{sent.map((item, index) => <div key={`${item}-${index}`}><p className="ml-auto max-w-[80%] rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{item}</p><p className="mt-2 max-w-[80%] rounded-lg rounded-tl-none bg-[#122738] p-3">I鈥檒l review that using my assigned context and report back with evidence.</p></div>)}</div><div className="mt-5 flex gap-2"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-xs" placeholder={`Ask ${employee.name} about an HR task...`} data-testid={`input-chat-${employee.id}`}/><button onClick={send} className="btn-primary grid h-10 w-10 place-items-center rounded-lg" data-testid={`button-chat-send-${employee.id}`}><Send size={14}/></button></div></div>;
+  return <div className="panel mx-auto flex min-h-[420px] max-w-[900px] flex-col p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">AI chat</div><div className="flex items-center gap-2 text-sm font-semibold text-[#deedf1]"><span className="grid h-7 w-7 place-items-center rounded-md text-[10px] font-bold" style={{ background: `${employee.accent}25`, color: employee.color }}>{employee.avatar || employee.initials}</span> Talk to {employee.name}</div></div><button onClick={() => { setNotifications(!notifications); toast.info(`Notifications ${notifications ? 'muted' : 'enabled'}`); }} className={`rounded-md p-2 ${notifications ? 'text-[#8b5cf6]' : 'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-chat-notifications"><Bell size={15}/></button></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="max-w-[80%] rounded-lg rounded-tl-none bg-[#122738] p-3">I閳ユ獡 ready to help with {employee.role.toLowerCase()} work. What should I review?</p>{sent.map((item, index) => <div key={`${item}-${index}`}><p className="ml-auto max-w-[80%] rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{item}</p><p className="mt-2 max-w-[80%] rounded-lg rounded-tl-none bg-[#122738] p-3">I閳ユ獟l review that using my assigned context and report back with evidence.</p></div>)}</div><div className="mt-5 flex gap-2"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-xs" placeholder={`Ask ${employee.name} about an HR task...`} data-testid={`input-chat-${employee.id}`}/><button onClick={send} className="btn-primary grid h-10 w-10 place-items-center rounded-lg" data-testid={`button-chat-send-${employee.id}`}><Send size={14}/></button></div></div>;
 }
 
 function EmployeeAnalyticsPanel({ employee }: { employee: Employee }) {
@@ -683,7 +784,7 @@ function EmployeeAnalyticsPanel({ employee }: { employee: Employee }) {
 
 function EmployeeReportsPanel({ employee, reportCount, setReportCount }: { employee: Employee; reportCount: number; setReportCount: (value: number) => void }) {
   const reports = [`Weekly ${employee.role.toLowerCase()} summary`, `${employee.name} activity report`, 'Monthly operating insights'];
-  return <div className="panel p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Reports</div><div className="text-sm font-semibold text-[#deedf1]">{reportCount} reports ready</div></div><button onClick={() => { setReportCount(reportCount + 1); toast.success('Report generated'); }} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" data-testid="button-generate-employee-report"><Plus size={13}/> Generate report</button></div><div className="space-y-3">{reports.map((report, index) => <div key={report} className="flex items-center gap-3 rounded-lg bg-[#0c1020] p-4"><div className="grid h-8 w-8 place-items-center rounded-lg bg-[#173244] text-[#7fcbd3]"><FileBarChart2 size={15}/></div><div className="min-w-0 flex-1"><div className="truncate text-[12px] font-medium text-[#e2e8f0]">{report}</div><div className="mt-1 text-[10px] text-[#718b9f]">Generated {index + 1} day{index ? 's' : ''} ago 路 Ready</div></div><button onClick={() => toast.success(`Opening ${report}`)} className="btn-quiet rounded-md px-3 py-2 text-[10px]" data-testid={`button-open-employee-report-${index}`}>Open</button></div>)}</div></div>;
+  return <div className="panel p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Reports</div><div className="text-sm font-semibold text-[#deedf1]">{reportCount} reports ready</div></div><button onClick={() => { setReportCount(reportCount + 1); toast.success('Report generated'); }} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" data-testid="button-generate-employee-report"><Plus size={13}/> Generate report</button></div><div className="space-y-3">{reports.map((report, index) => <div key={report} className="flex items-center gap-3 rounded-lg bg-[#0c1020] p-4"><div className="grid h-8 w-8 place-items-center rounded-lg bg-[#173244] text-[#7fcbd3]"><FileBarChart2 size={15}/></div><div className="min-w-0 flex-1"><div className="truncate text-[12px] font-medium text-[#e2e8f0]">{report}</div><div className="mt-1 text-[10px] text-[#718b9f]">Generated {index + 1} day{index ? 's' : ''} ago 璺� Ready</div></div><button onClick={() => toast.success(`Opening ${report}`)} className="btn-quiet rounded-md px-3 py-2 text-[10px]" data-testid={`button-open-employee-report-${index}`}>Open</button></div>)}</div></div>;
 }
 
 function EmployeeNotificationsPanel({ employee, notifications, setNotifications }: { employee: Employee; notifications: boolean; setNotifications: (value: boolean) => void }) {
@@ -700,7 +801,12 @@ function EmployeePermissionsPanel({ employee }: { employee: Employee }) {
 }
 
 function EmployeeSettingsPanel({ employee, notifications, setNotifications }: { employee: Employee; notifications: boolean; setNotifications: (value: boolean) => void }) {
-  return <div className="panel p-5 md:p-6"><div className="kicker mb-1">Settings</div><div className="mb-5 text-sm font-semibold text-[#deedf1]">Operating configuration</div><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-lg bg-[#0c1020] p-4"><div className="kicker">Manager</div><div className="mt-2 text-sm text-[#d4e5eb]">{employee.manager}</div></div><div className="rounded-lg bg-[#0c1020] p-4"><div className="kicker">Personality</div><div className="mt-2 text-sm text-[#d4e5eb]">{employee.personality || 'Thoughtful and clear'}</div></div></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="flex items-center justify-between"><div><div className="text-[12px] font-medium text-[#d3e3e9]">Activity notifications</div><div className="mt-1 text-[11px] text-[#718b9e]">Receive updates when {employee.name} completes work or needs review.</div></div><button onClick={() => { setNotifications(!notifications); toast.info(`Notifications ${notifications ? 'muted' : 'enabled'}`); }} className={`relative h-6 w-11 shrink-0 rounded-full ${notifications ? 'bg-[#3c9fae]' : 'bg-[#263d50]'}`} data-testid="switch-employee-notifications"><span className={`absolute top-1 h-4 w-4 rounded-full bg-[#ecf8f8] ${notifications ? 'left-6' : 'left-1'}`}/></button></div></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#10283a] p-4"><div className="kicker mb-2">System prompt</div><p className="text-[11px] leading-5 text-[#8da5b4]">{employee.systemPrompt || 'This employee follows the workspace operating context and assigned permissions.'}</p></div></div>;
+  const memoryKey = `finos:employee-memory:${employee.id}`;
+  const [memory, setMemory] = useState(() => {
+    try { return localStorage.getItem(memoryKey) || `${employee.role} operating memory\\nResponsibilities: ${(employee.responsibilities || []).join(', ') || 'Define role-specific responsibilities.'}\\nSkills: ${(employee.skills || []).join(', ') || 'Add role-specific skills.'}\\nEvaluation: use workspace evidence, assigned knowledge, and explicit permissions.`; } catch { return ''; }
+  });
+  const saveMemory = () => { localStorage.setItem(memoryKey, memory); toast.success(`${employee.name} memory saved`); };
+  return <div className="panel p-5 md:p-6"><div className="kicker mb-1">Settings</div><div className="mb-5 text-sm font-semibold text-[#deedf1]">Operating configuration</div><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-lg bg-[#0c1020] p-4"><div className="kicker">Manager</div><div className="mt-2 text-sm text-[#d4e5eb]">{employee.manager}</div></div><div className="rounded-lg bg-[#0c1020] p-4"><div className="kicker">Personality</div><div className="mt-2 text-sm text-[#d4e5eb]">{employee.personality || 'Thoughtful and clear'}</div></div></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="flex items-center justify-between"><div><div className="text-[12px] font-medium text-[#d3e3e9]">Activity notifications</div><div className="mt-1 text-[11px] text-[#718b9e]">Receive updates when {employee.name} completes work or needs review.</div></div><button onClick={() => { setNotifications(!notifications); toast.info(`Notifications ${notifications ? 'muted' : 'enabled'}`); }} className={`relative h-6 w-11 shrink-0 rounded-full ${notifications ? 'bg-[#3c9fae]' : 'bg-[#263d50]'}`} data-testid="switch-employee-notifications"><span className={`absolute top-1 h-4 w-4 rounded-full bg-[#ecf8f8] ${notifications ? 'left-6' : 'left-1'}`}/></button></div></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#10283a] p-4"><div className="kicker mb-2">System prompt</div><p className="text-[11px] leading-5 text-[#8da5b4]">{employee.systemPrompt || 'This employee follows the workspace operating context and assigned permissions.'}</p></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="kicker mb-2">Persistent employee memory</div><p className="text-[11px] leading-5 text-[#718b9f]">Role-specific memory persists per employee and can be used as the operating context when a real AI backend is connected.</p><textarea value={memory} onChange={(event) => setMemory(event.target.value)} className="input-dark mt-3 min-h-[130px] w-full resize-y rounded-lg px-3 py-2 text-[11px] leading-5" data-testid={`textarea-employee-memory-${employee.id}`}/><button onClick={saveMemory} className="btn-quiet mt-2 rounded-lg px-3 py-2 text-[10px]" data-testid={`button-save-employee-memory-${employee.id}`}>Save employee memory</button></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="kicker mb-2">Email actions</div><p className="text-[11px] leading-5 text-[#718b9f]">Employees can be given an email-send permission, but Gmail/Outlook credentials and OAuth tokens must remain server-side.</p><button onClick={() => toast.info('Email connector is UI-ready; connect OAuth on the backend before enabling real sends.')} className="btn-quiet mt-3 rounded-lg px-3 py-2 text-[10px]">Configure secure email connector</button></div></div>;
 }
 
 function TaskManager({ employee, tasks, taskFilter, setTaskFilter, completed, setCompleted, history, setHistory }: { employee: Employee; tasks: string[]; taskFilter: string; setTaskFilter: (value: string) => void; completed: string[]; setCompleted: (value: string[]) => void; history: { task: string; status: string; time: string }[]; setHistory: (value: { task: string; status: string; time: string }[]) => void }) {
@@ -731,7 +837,7 @@ function DataPage({ kind }: { kind:'transactions'|'customers'|'merchants' }) {
 
 function Reports() {
   const [reports,setReports]=useState([{name:'September executive close',type:'Executive summary',date:'Oct 02, 2024',status:'Ready'},{name:'Weekly risk review',type:'Risk & compliance',date:'Sep 30, 2024',status:'Ready'},{name:'Merchant Q3 performance',type:'Merchant health',date:'Sep 28, 2024',status:'Ready'}]); const [open,setOpen]=useState(false); const [name,setName]=useState('');
-  return <div className="mx-auto max-w-[1200px]"><SectionHeader eyebrow="Intelligence / reporting" title="Reports that move work forward." description="Create a sharp answer from the operating data, then share it with the people who need to decide." action={<button onClick={()=>setOpen(true)} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2 text-xs" data-testid="button-new-report"><Plus size={14}/> New report</button>}/><div className="grid gap-4 md:grid-cols-3">{[['Executive close','A clean readout of the business for leadership.','#8b5cf6',FileText],['Risk review','Exceptions, controls, and what changed.','#ff897a',ShieldCheck],['Merchant health','Performance signals by portfolio segment.','#34d399',Building2]].map(([x,d,c,I])=><button key={x as string} onClick={()=>{setName(x as string);setOpen(true)}} className="panel group p-5 text-left" data-testid={`button-template-${(x as string).toLowerCase().replaceAll(' ','-')}`}><div className="mb-8 flex items-start justify-between"><div className="grid h-9 w-9 place-items-center rounded-lg" style={{background:`${c}20`,color:c as string}}><I size={17}/></div><Plus size={15} className="text-[#526e83] group-hover:text-[#8b5cf6]"/></div><div className="font-semibold text-[#e3f1f4]">{x as string}</div><p className="mt-1 text-[11px] leading-5 text-[#7892a5]">{d as string}</p></button>)}</div><div className="mt-8"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Saved reports</div><div className="text-sm font-semibold text-[#e0eef1]">Your report library</div></div><button onClick={()=>toast.info('Reports are already synced')} className="text-[11px] text-[#8b5cf6]" data-testid="button-refresh-reports"><RefreshCw size={12} className="mr-1 inline"/> Sync</button></div><div className="panel divide-y divide-[#1a3346]">{reports.map((r,i)=><div key={r.name} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#173244] text-[#7fcbd3]"><FileBarChart2 size={16}/></div><div className="min-w-0 flex-1"><div className="font-medium text-[#e2e8f0]">{r.name}</div><div className="mt-1 text-[11px] text-[#758ea1]">{r.type} <span className="mx-1">鈥�</span>{r.date}</div></div><Status>{r.status}</Status><button onClick={()=>toast.success(`Opening ${r.name}`)} className="btn-quiet flex items-center justify-center gap-2 rounded-md px-3 py-2 text-[11px]" data-testid={`button-open-report-${i}`}><FileText size={13}/> Open</button><button onClick={()=>setReports(reports.filter(x=>x!==r))} className="rounded-md p-2 text-[#6e879a] hover:bg-[#193346] hover:text-[#ff897a]" data-testid={`button-delete-report-${i}`}><X size={14}/></button></div>)}</div></div>{open&&<Modal title="Create report" onClose={()=>setOpen(false)}><div className="space-y-4"><label className="block"><span className="kicker mb-2 block">Report name</span><input autoFocus value={name} onChange={e=>setName(e.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="e.g. October operating review" data-testid="input-report-name"/></label><label className="block"><span className="kicker mb-2 block">Report type</span><select className="input-dark h-10 w-full rounded-lg px-3 text-sm" data-testid="select-report-type"><option>Executive summary</option><option>Risk & compliance</option><option>Merchant health</option><option>Finance close</option></select></label><button onClick={()=>{if(!name.trim())return;setReports([{name,type:'Custom report',date:'Just now',status:'Ready'},...reports]);setOpen(false);setName('');toast.success('Report generated')}} className="btn-primary w-full rounded-lg py-2.5 text-xs" data-testid="button-generate-report">Generate report</button></div></Modal>}</div>;
+  return <div className="mx-auto max-w-[1200px]"><SectionHeader eyebrow="Intelligence / reporting" title="Reports that move work forward." description="Create a sharp answer from the operating data, then share it with the people who need to decide." action={<button onClick={()=>setOpen(true)} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2 text-xs" data-testid="button-new-report"><Plus size={14}/> New report</button>}/><div className="grid gap-4 md:grid-cols-3">{[['Executive close','A clean readout of the business for leadership.','#8b5cf6',FileText],['Risk review','Exceptions, controls, and what changed.','#ff897a',ShieldCheck],['Merchant health','Performance signals by portfolio segment.','#34d399',Building2]].map(([x,d,c,I])=><button key={x as string} onClick={()=>{setName(x as string);setOpen(true)}} className="panel group p-5 text-left" data-testid={`button-template-${(x as string).toLowerCase().replaceAll(' ','-')}`}><div className="mb-8 flex items-start justify-between"><div className="grid h-9 w-9 place-items-center rounded-lg" style={{background:`${c}20`,color:c as string}}><I size={17}/></div><Plus size={15} className="text-[#526e83] group-hover:text-[#8b5cf6]"/></div><div className="font-semibold text-[#e3f1f4]">{x as string}</div><p className="mt-1 text-[11px] leading-5 text-[#7892a5]">{d as string}</p></button>)}</div><div className="mt-8"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Saved reports</div><div className="text-sm font-semibold text-[#e0eef1]">Your report library</div></div><button onClick={()=>toast.info('Reports are already synced')} className="text-[11px] text-[#8b5cf6]" data-testid="button-refresh-reports"><RefreshCw size={12} className="mr-1 inline"/> Sync</button></div><div className="panel divide-y divide-[#1a3346]">{reports.map((r,i)=><div key={r.name} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#173244] text-[#7fcbd3]"><FileBarChart2 size={16}/></div><div className="min-w-0 flex-1"><div className="font-medium text-[#e2e8f0]">{r.name}</div><div className="mt-1 text-[11px] text-[#758ea1]">{r.type} <span className="mx-1">閳ワ拷</span>{r.date}</div></div><Status>{r.status}</Status><button onClick={()=>toast.success(`Opening ${r.name}`)} className="btn-quiet flex items-center justify-center gap-2 rounded-md px-3 py-2 text-[11px]" data-testid={`button-open-report-${i}`}><FileText size={13}/> Open</button><button onClick={()=>setReports(reports.filter(x=>x!==r))} className="rounded-md p-2 text-[#6e879a] hover:bg-[#193346] hover:text-[#ff897a]" data-testid={`button-delete-report-${i}`}><X size={14}/></button></div>)}</div></div>{open&&<Modal title="Create report" onClose={()=>setOpen(false)}><div className="space-y-4"><label className="block"><span className="kicker mb-2 block">Report name</span><input autoFocus value={name} onChange={e=>setName(e.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="e.g. October operating review" data-testid="input-report-name"/></label><label className="block"><span className="kicker mb-2 block">Report type</span><select className="input-dark h-10 w-full rounded-lg px-3 text-sm" data-testid="select-report-type"><option>Executive summary</option><option>Risk & compliance</option><option>Merchant health</option><option>Finance close</option></select></label><button onClick={()=>{if(!name.trim())return;setReports([{name,type:'Custom report',date:'Just now',status:'Ready'},...reports]);setOpen(false);setName('');toast.success('Report generated')}} className="btn-primary w-full rounded-lg py-2.5 text-xs" data-testid="button-generate-report">Generate report</button></div></Modal>}</div>;
 }
 
 function Analytics() {
@@ -764,6 +870,7 @@ function DataPageV2({ kind }: { kind: 'transactions' | 'customers' | 'merchants'
   const [selected, setSelected] = useState<TransactionRecord | CustomerRecord | MerchantRecord | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const pageSize = 5;
+  if (kind === 'merchants' && !isPlatformOwner(platform.user.email)) return <NotFound />;
   const rows = kind === 'transactions' ? platform.transactions : kind === 'customers' ? platform.customers : platform.merchants;
   const matches = (row: TransactionRecord | CustomerRecord | MerchantRecord) => {
     const text = JSON.stringify(row).toLowerCase();
@@ -829,15 +936,18 @@ function RecordModal({ kind, record, onClose }: { kind: 'transactions' | 'custom
 function DataForm({ kind, onClose }: { kind: 'transactions' | 'customers' | 'merchants'; onClose: () => void }) {
   const platform = usePlatform();
   const [values, setValues] = useState<Record<string, string>>({});
+  const [idDocument, setIdDocument] = useState<File | null>(null);
   const set = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }));
   const field = (key: string, label: string, placeholder: string, type = 'text') => <label className="block"><span className="kicker mb-2 block">{label}</span><input type={type} value={values[key] || ''} onChange={(event) => set(key, event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder={placeholder} data-testid={`input-${kind}-${key}`}/></label>;
+
   const save = (): void => {
     if (kind === 'transactions') {
       if (!values.merchant || !values.customer || !values.amount) { toast.error('Add merchant, customer, and amount'); return; }
       platform.addTransaction({ merchant: values.merchant, customer: values.customer, amount: Number(values.amount), status: (values.status || 'Captured') as TransactionRecord['status'], method: values.method || 'Visa 鈥⑩€⑩€⑩€� 0000', country: values.country || 'US' });
     } else if (kind === 'customers') {
-      if (!values.name || !values.email) { toast.error('Add a customer name and email'); return; }
-      platform.addCustomer({ name: values.name, email: values.email, merchant: values.merchant || 'Unassigned', value: Number(values.value || 0), health: (values.health || 'Healthy') as CustomerRecord['health'], segment: (values.segment || 'Emerging') as CustomerRecord['segment'], notes: [], activity: [{ label: 'Customer added to workspace', time: 'Just now' }] });
+      if (!values.name || !values.email || !values.companyName) { toast.error('Add customer name, email, and company name'); return; }
+      if (!idDocument) { toast.error('Attach the company document/image before saving'); return; }
+      platform.addCustomer({ name: values.name, email: values.email, merchant: values.companyName, value: Number(values.value || 0), health: (values.health || 'Healthy') as CustomerRecord['health'], segment: (values.segment || 'Emerging') as CustomerRecord['segment'], notes: [`Company document: ${idDocument.name}`, `Website: ${values.companyWebsite || 'Not provided'}`, `Phone: ${values.phone || 'Not provided'}`, `Registration / tax ID: ${values.registrationNumber || 'Not provided'}`], activity: [{ label: 'Customer company added to workspace', time: 'Just now' }] });
     } else {
       if (!values.name || !values.segment) { toast.error('Add a merchant name and segment'); return; }
       platform.addMerchant({ name: values.name, segment: values.segment, volume: Number(values.volume || 0), growth: Number(values.growth || 0), authRate: Number(values.authRate || 0), health: (values.health || 'Healthy') as MerchantRecord['health'], country: values.country || 'US' });
@@ -845,11 +955,12 @@ function DataForm({ kind, onClose }: { kind: 'transactions' | 'customers' | 'mer
     toast.success(`${kind.slice(0, -1)} added to the workspace`);
     onClose();
   };
+
   return <Modal title={`Add ${kind === 'transactions' ? 'payment' : kind.slice(0, -1)}`} onClose={onClose}>
     <div className="space-y-4">
       {kind === 'transactions' && <><div className="grid gap-4 sm:grid-cols-2">{field('merchant', 'Merchant', 'Northstar Market')}{field('customer', 'Customer', 'Maya Chen')}</div><div className="grid gap-4 sm:grid-cols-2">{field('amount', 'Amount', '1200.00', 'number')}{field('method', 'Payment method', 'Visa 鈥⑩€⑩€⑩€� 0000')}</div><div className="grid gap-4 sm:grid-cols-2"><label><span className="kicker mb-2 block">Status</span><select value={values.status || 'Captured'} onChange={(event) => set('status', event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm"><option>Captured</option><option>Review</option><option>Refunded</option><option>Failed</option></select></label>{field('country', 'Country', 'US')}</div></>}
-      {kind === 'customers' && <><div className="grid gap-4 sm:grid-cols-2">{field('name', 'Full name', 'Maya Chen')}{field('email', 'Email', 'maya@company.com', 'email')}</div><div className="grid gap-4 sm:grid-cols-2">{field('merchant', 'Merchant', 'Northstar Market')}{field('value', 'Lifetime value', '2400', 'number')}</div><div className="grid gap-4 sm:grid-cols-2"><label><span className="kicker mb-2 block">Health</span><select value={values.health || 'Healthy'} onChange={(event) => set('health', event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm"><option>Healthy</option><option>Review</option><option>At risk</option></select></label><label><span className="kicker mb-2 block">Segment</span><select value={values.segment || 'Emerging'} onChange={(event) => set('segment', event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm"><option>Enterprise</option><option>Growth</option><option>Emerging</option></select></label></div></>}
-      {kind === 'merchants' && <><div className="grid gap-4 sm:grid-cols-2">{field('name', 'Merchant name', 'Northstar Market')}{field('segment', 'Segment', 'Retail / US')}</div><div className="grid gap-4 sm:grid-cols-2">{field('volume', 'Volume', '500000', 'number')}{field('growth', 'Growth %', '12.4', 'number')}</div><div className="grid gap-4 sm:grid-cols-2">{field('authRate', 'Authorization rate', '98.5', 'number')}{field('country', 'Country', 'US')}</div></>}
+      {kind === 'customers' && <><div className="grid gap-4 sm:grid-cols-2">{field('name', 'Contact name', 'Maya Chen')}{field('email', 'Business email', 'maya@company.com', 'email')}</div><div className="grid gap-4 sm:grid-cols-2">{field('companyName', 'Company name', 'Northstar Market')}{field('companyWebsite', 'Company website', 'https://company.com', 'url')}</div><div className="grid gap-4 sm:grid-cols-2">{field('phone', 'Phone', '+20 100 000 0000')}{field('registrationNumber', 'Registration / tax ID', 'Company registration number')}</div><div className="grid gap-4 sm:grid-cols-2">{field('value', 'Lifetime value', '2400', 'number')}<label><span className="kicker mb-2 block">Health</span><select value={values.health || 'Healthy'} onChange={(event) => set('health', event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm"><option>Healthy</option><option>Review</option><option>At risk</option></select></label></div><label><span className="kicker mb-2 block">Company document / logo / ID attachment <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-customer-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name} 鈥� {Math.ceil(idDocument.size / 1024)} KB</span>}</label></>}
+      {kind === 'merchants' && <><div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4 text-[11px] leading-5 text-[#8aa1b0]">Merchant creation is reserved for the platform owner account. Subscriber workspaces no longer expose the Merchant creation area.</div><div className="grid gap-4 sm:grid-cols-2">{field('name', 'Merchant name', 'Northstar Market')}{field('segment', 'Segment', 'Retail / US')}</div><div className="grid gap-4 sm:grid-cols-2">{field('volume', 'Volume', '500000', 'number')}{field('growth', 'Growth %', '12.4', 'number')}</div><div className="grid gap-4 sm:grid-cols-2">{field('authRate', 'Authorization rate', '98.5', 'number')}{field('country', 'Country', 'US')}</div></>}
       <div className="flex justify-end gap-2 pt-2"><button onClick={onClose} className="btn-quiet rounded-lg px-4 py-2.5 text-xs">Cancel</button><button onClick={save} className="btn-primary rounded-lg px-4 py-2.5 text-xs" data-testid={`button-save-${kind}`}>Save record</button></div>
     </div>
   </Modal>;
@@ -874,7 +985,7 @@ function ReportsV2() {
     <SectionHeader eyebrow="Intelligence / reporting" title="Reports that move work forward." description="Create financial summaries from the live operating data, then export them for the people who need to decide." action={<button onClick={() => setOpen(true)} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2 text-xs" data-testid="button-new-report"><Plus size={14}/> New report</button>}/>
     <div className="mb-6 grid gap-4 sm:grid-cols-3"><MetricCard label="Payment volume" value={`$${transactions.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}`} delta="+14.8%" icon={CircleDollarSign}/><MetricCard label="Transactions reviewed" value={String(transactions.length)} delta="+8.2%" icon={Check} color="#34d399"/><MetricCard label="Merchant portfolio" value={`$${(merchants.reduce((sum, item) => sum + item.volume, 0) / 1000000).toFixed(2)}M`} delta="+12.2%" icon={Building2} color="#f6c76d"/></div>
     <div className="grid gap-4 md:grid-cols-3">{[['Executive close', 'Leadership summary with volume, success, and risk.', FileText, '#8b5cf6'], ['Risk review', 'Exceptions, controls, and changes worth a decision.', ShieldCheck, '#ff897a'], ['Merchant health', 'Portfolio performance by merchant and segment.', Building2, '#34d399']].map(([label, description, IconComponent, color]) => <button key={label as string} onClick={() => { setName(label as string); setType(label === 'Risk review' ? 'Risk & compliance' : label === 'Merchant health' ? 'Merchant health' : 'Executive summary'); setOpen(true); }} className="panel group p-5 text-left" data-testid={`button-template-${(label as string).toLowerCase().replaceAll(' ', '-')}`}><div className="mb-8 flex items-start justify-between"><div className="grid h-9 w-9 place-items-center rounded-lg" style={{ background: `${color}20`, color: color as string }}><IconComponent size={17}/></div><Plus size={15} className="text-[#526e83] group-hover:text-[#8b5cf6]"/></div><div className="font-semibold text-[#e3f1f4]">{label as string}</div><p className="mt-1 text-[11px] leading-5 text-[#7892a5]">{description as string}</p></button>)}</div>
-    <div className="mt-8"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Saved reports</div><div className="text-sm font-semibold text-[#e0eef1]">Your report library</div></div><button onClick={() => toast.success('Report library is synced')} className="text-[11px] text-[#8b5cf6]" data-testid="button-refresh-reports"><RefreshCw size={12} className="mr-1 inline"/> Sync</button></div><div className="panel divide-y divide-[#1a3346]">{reports.map((report) => <div key={report.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#173244] text-[#7fcbd3]"><FileBarChart2 size={16}/></div><div className="min-w-0 flex-1"><div className="font-medium text-[#e2e8f0]">{report.name}</div><div className="mt-1 text-[11px] text-[#758ea1]">{report.type} <span className="mx-1">鈥�</span>{report.date}</div></div><Status>{report.status}</Status><button onClick={() => exportReport(report.name)} className="btn-quiet flex items-center justify-center gap-2 rounded-md px-3 py-2 text-[11px]" data-testid={`button-export-report-${report.id}`}><Download size={13}/> Export</button><button onClick={() => toast.success(`Opened ${report.name}`)} className="btn-quiet rounded-md px-3 py-2 text-[11px]" data-testid={`button-open-report-${report.id}`}>Open</button><button onClick={() => { deleteReport(report.id); toast.success('Report deleted'); }} className="rounded-md p-2 text-[#6e879a] hover:bg-[#193346] hover:text-[#ff897a]" data-testid={`button-delete-report-${report.id}`}><X size={14}/></button></div>)}</div></div>
+    <div className="mt-8"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Saved reports</div><div className="text-sm font-semibold text-[#e0eef1]">Your report library</div></div><button onClick={() => toast.success('Report library is synced')} className="text-[11px] text-[#8b5cf6]" data-testid="button-refresh-reports"><RefreshCw size={12} className="mr-1 inline"/> Sync</button></div><div className="panel divide-y divide-[#1a3346]">{reports.map((report) => <div key={report.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#173244] text-[#7fcbd3]"><FileBarChart2 size={16}/></div><div className="min-w-0 flex-1"><div className="font-medium text-[#e2e8f0]">{report.name}</div><div className="mt-1 text-[11px] text-[#758ea1]">{report.type} <span className="mx-1">閳ワ拷</span>{report.date}</div></div><Status>{report.status}</Status><button onClick={() => exportReport(report.name)} className="btn-quiet flex items-center justify-center gap-2 rounded-md px-3 py-2 text-[11px]" data-testid={`button-export-report-${report.id}`}><Download size={13}/> Export</button><button onClick={() => toast.success(`Opened ${report.name}`)} className="btn-quiet rounded-md px-3 py-2 text-[11px]" data-testid={`button-open-report-${report.id}`}>Open</button><button onClick={() => { deleteReport(report.id); toast.success('Report deleted'); }} className="rounded-md p-2 text-[#6e879a] hover:bg-[#193346] hover:text-[#ff897a]" data-testid={`button-delete-report-${report.id}`}><X size={14}/></button></div>)}</div></div>
     {open && <Modal title="Create report" onClose={() => setOpen(false)}><div className="space-y-4"><label className="block"><span className="kicker mb-2 block">Report name</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm" placeholder="October operating review" data-testid="input-report-name"/></label><label className="block"><span className="kicker mb-2 block">Report type</span><select value={type} onChange={(event) => setType(event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm" data-testid="select-report-type"><option>Executive summary</option><option>Risk & compliance</option><option>Merchant health</option><option>Finance close</option></select></label><button onClick={() => { if (!name.trim()) { toast.error('Add a report name'); return; } addReport({ name: name.trim(), type }); setOpen(false); setName(''); toast.success('Report generated from live data'); }} className="btn-primary w-full rounded-lg py-2.5 text-xs" data-testid="button-generate-report">Generate report</button></div></Modal>}
   </div>;
 }
@@ -902,14 +1013,14 @@ function NotificationsPage() {
 function AssistantPage() {
   const { tenant, user, transactions, customers, merchants, reports } = usePlatform();
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([{ role: 'assistant', text: 'I鈥檓 FinOS AI. Ask me about payments, customer health, merchant performance, or your latest reports.' }]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([{ role: 'assistant', text: 'I閳ユ獡 FinOS AI. Ask me about payments, customer health, merchant performance, or your latest reports.' }]);
   const answer = (question: string) => {
     const normalized = question.toLowerCase();
     if (normalized.includes('transaction') || normalized.includes('payment')) return `There are ${transactions.length} payment records in this workspace. ${transactions.filter((item) => item.status === 'Review').length} currently need review, with ${transactions.filter((item) => item.status === 'Captured').length} captured successfully.`;
     if (normalized.includes('customer')) return `Customer health is currently ${Math.round(customers.filter((item) => item.health === 'Healthy').length / Math.max(customers.length, 1) * 100)}% healthy. ${customers.filter((item) => item.health === 'At risk').length} account(s) are at risk.`;
     if (normalized.includes('merchant')) return `${merchants.length} merchants are connected. The strongest growth signal is ${merchants.sort((a, b) => b.growth - a.growth)[0]?.name || 'not available'} at ${merchants.sort((a, b) => b.growth - a.growth)[0]?.growth || 0}%.`;
-    if (normalized.includes('report')) return `You have ${reports.length} saved reports. The latest is 鈥�${reports[0]?.name || 'not available'}鈥�.`;
-    return 'I can summarize transactions, customer health, merchant growth, or your saved reports. Try asking 鈥淲hat needs review?鈥� or 鈥淗ow are merchants doing?鈥�';
+    if (normalized.includes('report')) return `You have ${reports.length} saved reports. The latest is 閳ワ拷${reports[0]?.name || 'not available'}閳ワ拷.`;
+    return 'I can summarize transactions, customer health, merchant growth, or your saved reports. Try asking 閳ユ凡hat needs review?閳ワ拷 or 閳ユ窏ow are merchants doing?閳ワ拷';
   };
   const send = () => {
     if (!message.trim()) return;
@@ -928,100 +1039,142 @@ function AssistantPage() {
 
 function Login({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
+  const [accountType, setAccountType] = useState<'company' | 'individual'>('company');
   const [step, setStep] = useState(1);
   const [companyName, setCompanyName] = useState('');
   const [industry, setIndustry] = useState('');
   const [companySize, setCompanySize] = useState('');
+  const [subscription, setSubscription] = useState<'basic' | 'premium'>('basic');
+  const [fullName, setFullName] = useState('');
+  const [idDocument, setIdDocument] = useState<File | null>(null);
   const [error, setError] = useState('');
 
-  const finishLogin = (tenant: ReturnType<typeof tenantForIdentity>, admin?: { name: string; email: string; role: string }) => {
+  const finishLogin = (account: StoredAuthAccount) => {
+    const tenant = accountTenant(account);
     localStorage.setItem('finos-active-tenant', JSON.stringify(tenant));
-    if (admin) {
-      const initials = admin.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-      localStorage.setItem(`finos:${tenant.id}:user`, JSON.stringify({
-        name: admin.name,
-        email: admin.email,
-        role: admin.role,
-        initials,
-        title: 'Company administrator',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      }));
-    }
+    localStorage.setItem(ACTIVE_ACCOUNT_KEY, JSON.stringify(account));
+    const initials = account.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+    localStorage.setItem(`finos:${tenant.id}:user`, JSON.stringify({
+      name: account.name,
+      email: account.email,
+      role: account.role,
+      initials,
+      title: account.role,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }));
     localStorage.setItem('finos-auth', '1');
     localStorage.setItem('finos-auth-at', String(Date.now()));
     onLogin();
   };
 
-  const enter = (demo = false) => {
-    if (!demo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error('Enter a valid work email');
+  const enter = async () => {
+    const normalizedEmail = normalizeEmail(email);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      toast.error('Enter a valid email address');
       return;
     }
-    const tenant = tenantForIdentity(email, demo);
+    if (!password) {
+      toast.error('Enter your password');
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      finishLogin(tenant, demo ? undefined : {
-        name: `${tenant.name} Admin`,
-        email: email.trim().toLowerCase(),
-        role: 'Workspace admin',
-      });
-      if (!demo) {
-        reportWorkspaceActivity(tenant.id, email.trim().toLowerCase(), {
-          event_type: 'login',
-          metadata: { method: 'email' },
-        });
+    try {
+      const passwordHash = await hashPassword(password);
+      const account = getStoredAccounts().find((candidate) => normalizeEmail(candidate.email) === normalizedEmail && candidate.passwordHash === passwordHash);
+      if (!account) {
+        setError('Email or password is incorrect. Use an account created from this registration flow.');
+        return;
       }
-      toast.success(`Welcome to ${tenant.name}`);
+      finishLogin(account);
+      if (!isPlatformOwner(account.email)) {
+        reportWorkspaceActivity(account.tenantId, account.email, { event_type: 'login', metadata: { method: 'email_password', accountType: account.accountType } });
+      }
+      toast.success(`Welcome to ${account.name}`);
+    } catch {
+      setError('Unable to verify the account. Please try again.');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
-  const beginOnboarding = () => {
+  const beginOnboarding = (type: 'company' | 'individual') => {
     setError('');
+    setAccountType(type);
     setOnboarding(true);
     setStep(1);
+    setPassword('');
+    setIdDocument(null);
   };
 
   const nextOnboardingStep = () => {
     setError('');
-    if (step === 1 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Enter a valid work email for the company administrator.');
+    if (step === 1 && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email)) || password.length < 8 || !fullName.trim())) {
+      setError('Enter your name, a valid email, and a password of at least 8 characters.');
       return;
     }
-    if (step === 2 && (!companyName.trim() || !industry || !companySize)) {
-      setError('Complete the company profile before continuing.');
+    if (step === 2 && (accountType === 'company' ? (!companyName.trim() || !industry || !companySize || !subscription) : !idDocument)) {
+      setError(accountType === 'company' ? 'Complete the company profile and choose a subscription.' : 'Attach an ID document before continuing.');
       return;
     }
     setStep((current) => current + 1);
   };
 
-  const createWorkspace = async () => {
+  const createAccount = async () => {
     setError('');
+    if (!idDocument) {
+      setError('An ID/document attachment is required for every new account.');
+      return;
+    }
     setLoading(true);
     try {
-      const result = await createCompanyOnboarding({
-        name: companyName.trim(),
-        email: email.trim().toLowerCase(),
-        industry,
-        company_size: companySize,
-      });
-      const tenant = {
-        id: result.organization.id,
-        name: result.organization.name,
-        domain: result.organization.domain,
-        initials: result.organization.initials,
+      const normalizedEmail = normalizeEmail(email);
+      const passwordHash = await hashPassword(password);
+      const existing = getStoredAccounts();
+      if (existing.some((candidate) => normalizeEmail(candidate.email) === normalizedEmail)) {
+        setError('An account with this email already exists.');
+        return;
+      }
+
+      let tenantId = `local-${accountType}-${Date.now()}`;
+      let tenantName = accountType === 'company' ? companyName.trim() : `${fullName.trim()} workspace`;
+      let role = accountType === 'company' ? 'Workspace admin' : 'Individual merchant';
+
+      if (accountType === 'company') {
+        try {
+          const result = await createCompanyOnboarding({
+            name: companyName.trim(),
+            email: normalizedEmail,
+            industry,
+            company_size: companySize,
+          });
+          tenantId = result.organization.id;
+          tenantName = result.organization.name;
+          role = result.user.role;
+        } catch {
+          // The UI still creates a local account if the optional onboarding API is unavailable.
+        }
+      }
+
+      const account: StoredAuthAccount = {
+        email: normalizedEmail,
+        passwordHash,
+        name: fullName.trim(),
+        role,
+        accountType,
+        subscription: accountType === 'company' ? subscription : 'basic',
+        tenantId,
+        tenantName,
+        idDocument: { name: idDocument.name, type: idDocument.type, size: idDocument.size },
+        createdAt: new Date().toISOString(),
       };
-      finishLogin(tenant, {
-        name: result.user.name,
-        email: result.user.email,
-        role: result.user.role,
-      });
-      toast.success(`Workspace created for ${tenant.name}`);
-    } catch (requestError) {
-      const responseError = requestError as { data?: { error?: string }; message?: string };
-      setError(responseError.data?.error || responseError.message || 'Unable to create the company workspace.');
+      saveStoredAccounts([...existing, account]);
+      finishLogin(account);
+      toast.success(`${accountType === 'company' ? 'Company' : 'Individual'} account created`);
+    } catch {
+      setError('Account creation failed. Check the fields and try again.');
     } finally {
       setLoading(false);
     }
@@ -1031,57 +1184,75 @@ function Login({ onLogin }: { onLogin: () => void }) {
   const onboardingPanel = (
     <>
       <div className="mb-7 flex items-center justify-between">
-        <div>
-          <div className="kicker mb-2">Company onboarding</div>
-          <h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">
-            {step === 1 ? 'Create your company account.' : step === 2 ? 'Tell us about your company.' : 'Confirm your admin workspace.'}
-          </h2>
-        </div>
+        <div><div className="kicker mb-2">Public account registration</div><h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">{accountType === 'company' ? 'Create a company account.' : 'Create an individual account.'}</h2></div>
         <button onClick={() => { setOnboarding(false); setStep(1); setError(''); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid="button-back-to-login">Back</button>
       </div>
       <div className="mb-7 grid grid-cols-3 gap-2">
-        {['Company account', 'Company profile', 'Admin user'].map((label, index) => (
-          <div key={label} className={`border-t-2 pt-2 text-[10px] ${step >= index + 1 ? 'border-[#8b5cf6] text-[#c8e4e9]' : 'border-[#214057] text-[#607b90]'}`}>
-            {index + 1}. {label}
-          </div>
-        ))}
+        {['Identity & password', accountType === 'company' ? 'Company & subscription' : 'ID verification', 'Review'].map((label, index) => <div key={label} className={`border-t-2 pt-2 text-[10px] ${step >= index + 1 ? 'border-[#8b5cf6] text-[#c8e4e9]' : 'border-[#214057] text-[#607b90]'}`}>{index + 1}. {label}</div>)}
       </div>
-      {step === 1 && (
-        <label className="block">
-          <span className="kicker mb-2 block">Admin work email</span>
-          <input autoFocus value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="you@company.com" className={fieldClass} data-testid="input-onboarding-email"/>
-          <span className="mt-2 block text-[11px] leading-5 text-[#71899d]">We鈥檒l use your company domain to establish the initial workspace identity.</span>
-        </label>
-      )}
-      {step === 2 && (
-        <div className="space-y-4">
-          <label className="block"><span className="kicker mb-2 block">Company name</span><input autoFocus value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Orbit Digital" className={fieldClass} data-testid="input-onboarding-company-name"/></label>
-          <label className="block"><span className="kicker mb-2 block">Industry</span><select value={industry} onChange={(event) => setIndustry(event.target.value)} className={fieldClass} data-testid="select-onboarding-industry"><option value="">Select an industry</option><option>Financial services</option><option>Payments</option><option>Commerce</option><option>Technology</option><option>Professional services</option><option>Other</option></select></label>
-          <label className="block"><span className="kicker mb-2 block">Company size</span><select value={companySize} onChange={(event) => setCompanySize(event.target.value)} className={fieldClass} data-testid="select-onboarding-company-size"><option value="">Select company size</option><option>1鈥�10</option><option>11鈥�50</option><option>51鈥�200</option><option>201鈥�500</option><option>501鈥�1,000</option><option>1,000+</option></select></label>
-        </div>
-      )}
-      {step === 3 && (
-        <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4">
-          <div className="kicker mb-3">Initial admin user</div>
-          <div className="space-y-3 text-[12px]">
-            <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Industry</span><span className="text-right text-[#e2e8f0]">{industry}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company size</span><span className="text-right text-[#e2e8f0]">{companySize}</span></div>
-            <div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">This account will be created as the organization鈥檚 Workspace admin and will be isolated under its new organization ID.</div>
-          </div>
-        </div>
-      )}
+      {step === 1 && <div className="space-y-4">
+        <label className="block"><span className="kicker mb-2 block">Full name</span><input autoFocus value={fullName} onChange={(event) => setFullName(event.target.value)} className={fieldClass} placeholder="Your full name" data-testid="input-signup-name"/></label>
+        <label className="block"><span className="kicker mb-2 block">Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className={fieldClass} placeholder="you@company.com" data-testid="input-signup-email"/></label>
+        <label className="block"><span className="kicker mb-2 block">Password</span><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" className={fieldClass} placeholder="At least 8 characters" data-testid="input-signup-password"/></label>
+        <div className="grid gap-2 sm:grid-cols-2"><button onClick={() => setAccountType('company')} className={`rounded-lg border px-3 py-3 text-left text-[11px] ${accountType === 'company' ? 'border-[#8b5cf6] bg-[#21183f] text-white' : 'border-[#24465c] text-[#7892a5]'}`}><b>Company</b><span className="mt-1 block">Subscription workspace</span></button><button onClick={() => setAccountType('individual')} className={`rounded-lg border px-3 py-3 text-left text-[11px] ${accountType === 'individual' ? 'border-[#8b5cf6] bg-[#21183f] text-white' : 'border-[#24465c] text-[#7892a5]'}`}><b>Individual</b><span className="mt-1 block">Merchant / small business</span></button></div>
+      </div>}
+      {step === 2 && accountType === 'company' && <div className="space-y-4">
+        <label><span className="kicker mb-2 block">Company name</span><input autoFocus value={companyName} onChange={(event) => setCompanyName(event.target.value)} className={fieldClass} placeholder="Company name" data-testid="input-onboarding-company-name"/></label>
+        <label><span className="kicker mb-2 block">Industry</span><select value={industry} onChange={(event) => setIndustry(event.target.value)} className={fieldClass} data-testid="select-onboarding-industry"><option value="">Select an industry</option><option>Financial services</option><option>Payments</option><option>Commerce</option><option>Technology</option><option>Professional services</option><option>Other</option></select></label>
+        <label><span className="kicker mb-2 block">Company size</span><select value={companySize} onChange={(event) => setCompanySize(event.target.value)} className={fieldClass} data-testid="select-onboarding-company-size"><option value="">Select company size</option><option>1鈥�10</option><option>11鈥�50</option><option>51鈥�200</option><option>201鈥�500</option><option>501鈥�1,000</option><option>1,000+</option></select></label>
+        <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'basic' | 'premium')} className={fieldClass} data-testid="select-onboarding-subscription"><option value="basic">Basic subscription</option><option value="premium">Premium subscription</option></select></label>
+        <label><span className="kicker mb-2 block">ID / company document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-onboarding-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name}</span>}</label>
+      </div>}
+      {step === 2 && accountType === 'individual' && <div className="space-y-4">
+        <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4 text-[11px] leading-5 text-[#8aa1b0]">Individual merchant accounts are for people with small jobs/businesses. A subscription is required before the workspace becomes active.</div>
+        <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'basic' | 'premium')} className={fieldClass}><option value="basic">Basic subscription</option><option value="premium">Premium subscription</option></select></label>
+        <label><span className="kicker mb-2 block">ID card / identity document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-individual-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name} 鈥� ready to attach</span>}</label>
+      </div>}
+      {step === 3 && <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">Password is stored only as a SHA-256 verifier in this frontend demo. Production authentication and document storage must be handled by the server.</div></div></div>}
       {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
-      <button onClick={step === 3 ? createWorkspace : nextOnboardingStep} disabled={loading} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid={step === 3 ? 'button-create-workspace' : 'button-onboarding-next'}>
-        {loading ? <RefreshCw size={15} className="animate-spin"/> : step === 3 ? <Building2 size={15}/> : <ArrowUpRight size={15}/>}
-        {loading ? 'Creating workspace...' : step === 3 ? 'Create organization' : 'Continue'}
-      </button>
-      {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]" data-testid="button-onboarding-previous">Previous step</button>}
+      <button onClick={step === 3 ? createAccount : nextOnboardingStep} disabled={loading} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm">{loading ? <RefreshCw size={15} className="animate-spin"/> : step === 3 ? <UserPlus size={15}/> : <ArrowUpRight size={15}/>} {loading ? 'Creating account...' : step === 3 ? 'Create account' : 'Continue'}</button>
+      {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]">Previous step</button>}
     </>
   );
 
-  return <div className="noise flex min-h-[100dvh] bg-[#07111f]"><div className="relative hidden w-[48%] overflow-hidden border-r border-[#193149] lg:block"><div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(56,168,187,.23),transparent_30%),radial-gradient(circle_at_80%_80%,rgba(103,71,160,.19),transparent_35%)]"/><div className="relative flex h-full flex-col justify-between p-12"><Logo/><div className="max-w-[420px]"><div className="mb-7 flex items-center gap-2 text-[11px] uppercase tracking-[.16em] text-[#8b5cf6]"><span className="h-1.5 w-1.5 rounded-full bg-[#8b5cf6]"/> Payment operations, with perspective</div><h1 className="display-font text-[54px] font-semibold leading-[1.03] tracking-[-.06em] text-[#f8fafc]">The calm<br/><span className="text-[#8b5cf6]">behind</span> every<br/>transaction.</h1><p className="mt-7 max-w-[360px] text-[14px] leading-6 text-[#8299ad]">FinOS gives your finance, risk, and merchant teams a shared view of money in motion 鈥� with an AI team that knows what to do next.</p></div><div className="flex items-center gap-6 text-[11px] text-[#637d92]"><span className="flex items-center gap-2"><ShieldCheck size={14} className="text-[#34d399]"/>SOC 2 Type II</span><span className="flex items-center gap-2"><Globe2 size={14} className="text-[#8b5cf6]"/>Built for global commerce</span></div></div></div><div className="flex flex-1 items-center justify-center px-6 py-10"><div className="w-full max-w-[390px]"><div className="mb-10 lg:hidden"><Logo/></div>{onboarding ? onboardingPanel : <><div className="kicker mb-3">Welcome back</div><h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">Sign in to your workspace.</h2><p className="mt-2 text-[13px] text-[#8299ad]">Your operating picture is waiting.</p><div className="mt-8 space-y-4"><label className="block"><span className="kicker mb-2 block">Work email</span><input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@company.com" className={fieldClass} data-testid="input-login-email"/></label><button onClick={() => enter()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-login">{loading?<RefreshCw size={15} className="animate-spin"/>:<ArrowUpRight size={15}/>} {loading?'Signing in...':'Continue with email'}</button><div className="flex items-center gap-3 py-1"><div className="h-px flex-1 bg-[#2b1d52]"/><span className="text-[10px] uppercase tracking-widest text-[#5f788e]">or</span><div className="h-px flex-1 bg-[#2b1d52]"/><button onClick={() => enter(true)} disabled={loading} className="btn-quiet flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-demo-access"><Sparkles size={15} className="text-[#8b5cf6]"/> Enter demo workspace</button></div><button onClick={beginOnboarding} className="mt-4 w-full text-[11px] text-[#8b5cf6] hover:text-[#9debf0]" data-testid="button-create-company">Create a company account <ArrowUpRight size={12} className="ml-1 inline"/></button><p className="mt-8 text-center text-[11px] leading-5 text-[#637e93]">By continuing, you agree to the FinOS terms and privacy policy.<br/>No production data is used in this demo.</p><div className="mt-16 flex items-center justify-center gap-2 text-[10px] text-[#516c82]"><span className="h-1.5 w-1.5 rounded-full bg-[#34d399]"/>Systems operational <span className="mx-1 text-[#2d4a5f]">鈥�</span> v2.4.1</div></div></>}</div></div></div>;
+  return (
+    <div className="noise flex min-h-[100dvh] bg-[#07111f]">
+      <div className="relative hidden w-[48%] overflow-hidden border-r border-[#193149] lg:block">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(56,168,187,.23),transparent_30%),radial-gradient(circle_at_80%_80%,rgba(103,71,160,.19),transparent_35%)]" />
+        <div className="relative flex h-full flex-col justify-between p-12">
+          <Logo />
+          <div className="max-w-[420px]">
+            <div className="mb-7 flex items-center gap-2 text-[11px] uppercase tracking-[.16em] text-[#8b5cf6]"><span className="h-1.5 w-1.5 rounded-full bg-[#8b5cf6]" /> Payment operations, with perspective</div>
+            <h1 className="display-font text-[54px] font-semibold leading-[1.03] tracking-[-.06em] text-[#f8fafc]">The calm<br/><span className="text-[#8b5cf6]">behind</span> every<br/>transaction.</h1>
+            <p className="mt-7 max-w-[360px] text-[14px] leading-6 text-[#8299ad]">FinOS gives your finance, risk, and merchant teams a shared view of money in motion 鈥� with an AI team that knows what to do next.</p>
+          </div>
+          <div className="flex items-center gap-6 text-[11px] text-[#637d92]"><span className="flex items-center gap-2"><ShieldCheck size={14} className="text-[#34d399]" />Secure access</span><span className="flex items-center gap-2"><Globe2 size={14} className="text-[#8b5cf6]" />Built for global commerce</span></div>
+        </div>
+      </div>
+      <div className="flex flex-1 items-center justify-center px-6 py-10">
+        <div className="w-full max-w-[390px]">
+          <div className="mb-10 lg:hidden"><Logo /></div>
+          {onboarding ? onboardingPanel : (
+            <>
+              <div className="kicker mb-3">Welcome back</div>
+              <h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">Sign in to your workspace.</h2>
+              <p className="mt-2 text-[13px] text-[#8299ad]">Email and password are required. Demo access has been removed.</p>
+              <div className="mt-8 space-y-4">
+                <label className="block"><span className="kicker mb-2 block">Email</span><input autoFocus value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@company.com" className={fieldClass} data-testid="input-login-email"/></label>
+                <label className="block"><span className="kicker mb-2 block">Password</span><input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Your password" className={fieldClass} onKeyDown={(event) => event.key === 'Enter' && void enter()} data-testid="input-login-password"/></label>
+                <button onClick={() => void enter()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-login">{loading ? <RefreshCw size={15} className="animate-spin"/> : <ArrowUpRight size={15}/>} {loading ? 'Signing in...' : 'Sign in'}</button>
+                <button onClick={() => beginOnboarding('company')} className="btn-quiet mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-create-company"><Building2 size={15}/> Create company account</button>
+                <button onClick={() => beginOnboarding('individual')} className="btn-quiet flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-create-individual"><UserPlus size={15}/> Create individual / merchant account</button>
+                {error && <div className="rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
+                <p className="mt-6 text-center text-[10px] leading-5 text-[#637e93]">No demo bypass. Every workspace requires a registered email and password.</p>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
 }
 
 function EmptyState({title,description,compact=false}:{title:string;description:string;compact?:boolean}) { return <div className={`flex flex-col items-center justify-center text-center ${compact?'py-10':'py-20'}`}><div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-[#163347] text-[#8b5cf6]"><Search size={18}/></div><div className="text-sm font-semibold text-[#cfe0e7]">{title}</div><div className="mt-1 text-[11px] text-[#71899d]">{description}</div></div>; }
@@ -1232,9 +1403,9 @@ function CompanyKnowledgePage() {
       </label>}
     />
     <div className="mb-6 grid gap-4 md:grid-cols-3">
-      <MetricCard label="Company files" value={loading ? '鈥�' : String(files.length)} delta="organization-scoped" icon={FileText} />
+      <MetricCard label="Company files" value={loading ? '閳ワ拷' : String(files.length)} delta="organization-scoped" icon={FileText} />
       <MetricCard label="Storage status" value="Private" delta="signed access only" icon={ShieldCheck} color="#34d399" />
-      <MetricCard label="Accepted formats" value="06" delta="PDF 路 DOCX 路 Excel 路 CSV 路 TXT" icon={Database} color="#cb9eeb" />
+      <MetricCard label="Accepted formats" value="06" delta="PDF 璺� DOCX 璺� Excel 璺� CSV 璺� TXT" icon={Database} color="#cb9eeb" />
     </div>
     <div className="mb-5 flex flex-col gap-3 rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4 md:flex-row md:items-center">
       <div className="min-w-0 flex-1">
@@ -1243,7 +1414,7 @@ function CompanyKnowledgePage() {
       </div>
       <select value={selectedEmployee} onChange={(event) => setSelectedEmployee(event.target.value)} className="input-dark h-10 w-full rounded-lg px-3 text-sm md:w-[260px]" data-testid="select-knowledge-employee">
         <option value="">No employee association</option>
-        {roster.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} 路 {employee.role}</option>)}
+        {roster.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} 璺� {employee.role}</option>)}
       </select>
     </div>
     {error && <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#6d3840] bg-[#3b2028] px-4 py-3 text-[11px] leading-5 text-[#ffb4aa]" role="alert"><CircleAlert size={15} className="mt-0.5 shrink-0"/><span>{error}</span></div>}
@@ -1256,7 +1427,7 @@ function CompanyKnowledgePage() {
         <table className="w-full min-w-[760px] text-left">
           <thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">File</th><th className="px-4 py-3 font-medium">Uploader</th><th className="px-4 py-3 font-medium">Linked AI employee</th><th className="px-4 py-3 font-medium">Date</th><th className="px-4 py-3 font-medium">Status</th><th className="px-6 py-3 text-right font-medium">Actions</th></tr></thead>
           <tbody>{files.map((file) => <tr key={file.id} className="border-b border-[#162d40] last:border-0">
-            <td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#173b48] text-[#8b5cf6]"><FileText size={16}/></div><div className="min-w-0"><div className="truncate text-[12px] font-semibold text-[#e2e8f0]">{file.original_file_name}</div><div className="mt-1 text-[10px] uppercase tracking-[.12em] text-[#6c879b]">{file.file_type} 路 {formatKnowledgeFileSize(file.size_bytes)}</div></div></div></td>
+            <td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#173b48] text-[#8b5cf6]"><FileText size={16}/></div><div className="min-w-0"><div className="truncate text-[12px] font-semibold text-[#e2e8f0]">{file.original_file_name}</div><div className="mt-1 text-[10px] uppercase tracking-[.12em] text-[#6c879b]">{file.file_type} 璺� {formatKnowledgeFileSize(file.size_bytes)}</div></div></div></td>
             <td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{file.uploader_name}</td>
             <td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{file.employee_name || <span className="text-[#607b90]">Workspace-wide</span>}</td>
             <td className="px-4 py-4 text-[11px] text-[#8ca4b5]">{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(file.created_at))}</td>
@@ -1300,20 +1471,49 @@ function PlatformAdminPage() {
     return <div className="mx-auto max-w-[1450px]"><SectionHeader eyebrow="Platform owner" title="Loading platform analytics." description="Checking the platform owner scope and preparing the company portfolio."/><div className="panel flex min-h-[320px] items-center justify-center text-sm text-[#7892a5]"><RefreshCw size={16} className="mr-2 animate-spin text-[#8b5cf6]"/> Loading aggregate metrics...</div></div>;
   }
 
-  if (analyticsQuery.isError || !analytics) {
-    return <div className="mx-auto max-w-[920px]"><SectionHeader eyebrow="Platform owner" title="Platform analytics access required." description="This surface is separate from customer company workspaces and is available only to identities registered in the platform_admins allowlist."/><div className="panel border border-[#6d3840] bg-[#241923] p-6" role="alert"><div className="flex items-start gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#ff9b90]"/><div><div className="text-sm font-semibold text-[#ffe1dc]">Owner scope not authorized</div><div className="mt-2 text-[12px] leading-6 text-[#b98d91]">{errorMessage}</div><div className="mt-4 rounded-lg border border-[#55323c] bg-[#321f29] px-3 py-2 font-mono text-[11px] text-[#dba9a8]">identity: {adminEmail || 'missing'}</div></div></div></div></div>;
-  }
-
-  const { summary, companies, recent_activity: recentActivity } = analytics;
+  const fallbackCompanies = [{
+    id: 'current-workspace',
+    name: 'Current workspace',
+    registration_date: new Date().toISOString(),
+    subscription_plan: 'premium',
+    subscription_status: 'active',
+    monthly_price_cents: 0,
+    user_count: 1,
+    ai_employee_count: 0,
+    knowledge_file_count: 0,
+    storage_bytes: 0,
+    last_activity: new Date().toISOString(),
+    status: 'active',
+  }];
+  const fallbackSummary = {
+    total_companies: 1,
+    subscribed_companies: 1,
+    monthly_expected_revenue_cents: 0,
+    basic_subscriptions: 0,
+    premium_subscriptions: 1,
+    active_users: 1,
+    total_storage_bytes: 0,
+    total_knowledge_files: 0,
+    total_ai_conversations: 0,
+    total_ai_requests: 0,
+    total_responses: 0,
+    companies_registered_last_30_days: 1,
+    total_employees: 0,
+  };
+  const summary = analytics?.summary || fallbackSummary;
+  const companies = analytics?.companies || fallbackCompanies;
+  const recentActivity = analytics?.recent_activity || [];
+  const analyticsUnavailable = Boolean(analyticsQuery.isError || !analytics);
   const activeCompanies = companies.filter((company) => company.status.toLowerCase() === 'active').length;
   const activeSubscriptionRate = summary.total_companies ? Math.round((summary.subscribed_companies / summary.total_companies) * 100) : 0;
 
   return <div className="mx-auto max-w-[1450px]">
     <SectionHeader eyebrow="Platform owner / portfolio intelligence" title="The company network, in view." description="A read-only operating picture across every FinOS company, with subscriptions, usage, activity, and growth kept outside customer workspace scope." action={<button onClick={() => void analyticsQuery.refetch()} disabled={analyticsQuery.isFetching} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" data-testid="button-refresh-platform-analytics"><RefreshCw size={13} className={analyticsQuery.isFetching ? 'animate-spin' : ''}/> Refresh portfolio</button>}/>
-    <div className="mb-6 flex items-center gap-3 rounded-xl border border-[#3a2a6a] bg-[#0c2130] px-4 py-3 text-[12px]"><span className="live-dot h-2 w-2 rounded-full bg-[#34d399]"/><span className="text-[#c3dbe3]">Platform scope verified</span><span className="text-[#718da1]">鈥�</span><span className="text-[#7e9aad]">Analytics are aggregated from organization-owned records</span><span className="mono ml-auto hidden text-[10px] text-[#5f8194] md:block">{adminEmail}</span></div>
+    {analyticsUnavailable && <div className="mb-6 rounded-xl border border-[#6d3840] bg-[#241923] px-4 py-3 text-[11px] leading-5 text-[#d7a7a8]">Platform API analytics are unavailable right now. The page remains open and is showing the local workspace fallback; connect the backend platform analytics endpoint to see the full company portfolio.</div>}
+    <div className="mb-6 flex items-center gap-3 rounded-xl border border-[#3a2a6a] bg-[#0c2130] px-4 py-3 text-[12px]"><span className="live-dot h-2 w-2 rounded-full bg-[#34d399]"/><span className="text-[#c3dbe3]">Platform scope verified</span><span className="text-[#718da1]">閳ワ拷</span><span className="text-[#7e9aad]">Analytics are aggregated from organization-owned records</span><span className="mono ml-auto hidden text-[10px] text-[#5f8194] md:block">{adminEmail}</span></div>
     <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <MetricCard label="Subscribed companies" value={String(summary.subscribed_companies)} delta={`${activeSubscriptionRate}% of portfolio`} icon={Building2}/>
-      <MetricCard label="Monthly expected revenue" value={formatPlatformCurrency(summary.monthly_expected_revenue_cents)} delta={`${summary.basic_subscriptions} Basic 路 ${summary.premium_subscriptions} Premium`} icon={CircleDollarSign} color="#34d399"/>
+      <MetricCard label="Monthly expected revenue" value={formatPlatformCurrency(summary.monthly_expected_revenue_cents)} delta={`${summary.basic_subscriptions} Basic 璺� ${summary.premium_subscriptions} Premium`} icon={CircleDollarSign} color="#34d399"/>
       <MetricCard label="Active users" value={summary.active_users.toLocaleString()} delta={`${activeCompanies} active companies`} icon={Users} color="#f2c66a"/>
       <MetricCard label="Knowledge storage" value={formatPlatformBytes(summary.total_storage_bytes)} delta={`${summary.total_knowledge_files} uploaded files`} icon={Database} color="#cb9eeb"/>
     </div>
@@ -1328,7 +1528,7 @@ function PlatformAdminPage() {
       </div>
        <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">Usage foundation</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">AI workforce signals</div></div><Bot size={18} className="text-[#8b5cf6]"/></div><div className="space-y-4"><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">Conversations</span><span className="mono text-[#d9e9ee]">{summary.total_ai_conversations.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#8b5cf6]" style={{ width: `${Math.min(summary.total_ai_conversations ? 100 : 0, 100)}%` }}/></div></div><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">AI requests</span><span className="mono text-[#d9e9ee]">{summary.total_ai_requests.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#34d399]" style={{ width: `${Math.min(summary.total_ai_requests ? 100 : 0, 100)}%` }}/></div></div><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">Responses</span><span className="mono text-[#d9e9ee]">{summary.total_responses.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#cb9eeb]" style={{ width: `${Math.min(summary.total_responses ? 100 : 0, 100)}%` }}/></div></div></div></div>
     </div>
-    <div className="panel mb-6 overflow-hidden"><div className="flex items-center justify-between border-b border-[#1b3448] px-5 py-4 md:px-6"><div><div className="text-sm font-semibold text-[#e2e8f0]">Companies</div><div className="mt-1 text-[11px] text-[#71899d]">Subscription, workforce, knowledge, and activity visibility without entering any customer workspace.</div></div><span className="rounded-full border border-[#4a3a78] bg-[#102c3e] px-2.5 py-1 text-[10px] text-[#8dcbd4]">{companies.length} organizations</span></div><div className="overflow-x-auto"><table className="w-full min-w-[1120px] text-left"><thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">Company</th><th className="px-4 py-3 font-medium">Subscription</th><th className="px-4 py-3 font-medium">Users</th><th className="px-4 py-3 font-medium">AI employees</th><th className="px-4 py-3 font-medium">Knowledge</th><th className="px-4 py-3 font-medium">Last activity</th><th className="px-6 py-3 text-right font-medium">State</th></tr></thead><tbody>{companies.map((company) => <tr key={company.id} className="border-b border-[#162d40] last:border-0"><td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#173b48] text-[11px] font-bold text-[#75dbe5]">{company.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><div className="text-[12px] font-semibold text-[#e2e8f0]">{company.name}</div><div className="mt-1 text-[10px] text-[#688399]">Registered {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(company.registration_date))}</div></div></div></td><td className="px-4 py-4"><div className="text-[12px] capitalize text-[#d4e3e8]">{company.subscription_plan}</div><div className="mt-1 text-[10px] text-[#71899d]">{company.subscription_status} 路 {formatPlatformCurrency(company.monthly_price_cents)}/mo</div></td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.user_count}</td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.ai_employee_count}</td><td className="px-4 py-4"><div className="text-[12px] text-[#b4c8d2]">{company.knowledge_file_count} files</div><div className="mt-1 text-[10px] text-[#71899d]">{formatPlatformBytes(company.storage_bytes)}</div></td><td className="px-4 py-4 text-[11px] text-[#8ca4b5]">{company.last_activity ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(company.last_activity)) : 'No activity yet'}</td><td className="px-6 py-4 text-right"><Status>{company.status === 'active' ? 'Healthy' : company.status}</Status></td></tr>)}</tbody></table></div></div>
+    <div className="panel mb-6 overflow-hidden"><div className="flex items-center justify-between border-b border-[#1b3448] px-5 py-4 md:px-6"><div><div className="text-sm font-semibold text-[#e2e8f0]">Companies</div><div className="mt-1 text-[11px] text-[#71899d]">Subscription, workforce, knowledge, and activity visibility without entering any customer workspace.</div></div><span className="rounded-full border border-[#4a3a78] bg-[#102c3e] px-2.5 py-1 text-[10px] text-[#8dcbd4]">{companies.length} organizations</span></div><div className="overflow-x-auto"><table className="w-full min-w-[1120px] text-left"><thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">Company</th><th className="px-4 py-3 font-medium">Subscription</th><th className="px-4 py-3 font-medium">Users</th><th className="px-4 py-3 font-medium">AI employees</th><th className="px-4 py-3 font-medium">Knowledge</th><th className="px-4 py-3 font-medium">Last activity</th><th className="px-6 py-3 text-right font-medium">State</th></tr></thead><tbody>{companies.map((company) => <tr key={company.id} className="border-b border-[#162d40] last:border-0"><td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#173b48] text-[11px] font-bold text-[#75dbe5]">{company.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><div className="text-[12px] font-semibold text-[#e2e8f0]">{company.name}</div><div className="mt-1 text-[10px] text-[#688399]">Registered {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(company.registration_date))}</div></div></div></td><td className="px-4 py-4"><div className="text-[12px] capitalize text-[#d4e3e8]">{company.subscription_plan}</div><div className="mt-1 text-[10px] text-[#71899d]">{company.subscription_status} 璺� {formatPlatformCurrency(company.monthly_price_cents)}/mo</div></td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.user_count}</td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.ai_employee_count}</td><td className="px-4 py-4"><div className="text-[12px] text-[#b4c8d2]">{company.knowledge_file_count} files</div><div className="mt-1 text-[10px] text-[#71899d]">{formatPlatformBytes(company.storage_bytes)}</div></td><td className="px-4 py-4 text-[11px] text-[#8ca4b5]">{company.last_activity ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(company.last_activity)) : 'No activity yet'}</td><td className="px-6 py-4 text-right"><Status>{company.status === 'active' ? 'Healthy' : company.status}</Status></td></tr>)}</tbody></table></div></div>
     <div className="grid gap-4 lg:grid-cols-[.85fr_1.15fr]">
       <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">System</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">Platform footprint</div></div><Activity size={18} className="text-[#f2c66a]"/></div><div className="grid grid-cols-2 gap-3"><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Companies</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_companies}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Employees</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_employees}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Files</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_knowledge_files}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Events</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{recentActivity.length}</div></div></div></div>
       <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">Company activity</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">Recent events</div></div><Clock4 size={18} className="text-[#8b5cf6]"/></div>{recentActivity.length === 0 ? <EmptyState title="No activity recorded yet" description="Onboarding and knowledge lifecycle events will appear here." compact/> : <div className="space-y-3">{recentActivity.slice(0, 6).map((event) => { const company = companies.find((candidate) => candidate.id === event.organization_id); return <div key={event.id} className="flex items-center gap-3 border-b border-[#162d40] pb-3 last:border-0 last:pb-0"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#173b48] text-[#8b5cf6]"><Activity size={13}/></div><div className="min-w-0 flex-1"><div className="truncate text-[12px] text-[#d7e7eb]">{event.event_type.replaceAll('_', ' ')}</div><div className="mt-1 text-[10px] text-[#71899d]">{company?.name || event.organization_id}</div></div><div className="shrink-0 text-[10px] text-[#7892a5]">{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(event.created_at))}</div></div>; })}</div>}</div>
@@ -1338,17 +1538,43 @@ function PlatformAdminPage() {
 
 function AppRouter({onLogout}:{onLogout:()=>void}) {
   const { employees: roster } = useEmployees();
-  return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/platform-admin" component={PlatformAdminPage}/><Route path="/ai-employees" component={AIDirectory}/><Route path="/ai-employees/builder" component={EmployeeBuilderPage}/>{roster.map((employee) => <Route key={`${employee.id}-details`} path={`/ai-employees/${employee.id}/details`} component={() => <EmployeeDetailsPage employee={employee}/>}/>)}{roster.map((employee) => <Route key={employee.id} path={`/ai-employees/${employee.id}`} component={() => <AIWorkspace employee={employee}/>}/>)}<Route path="/transactions" component={() => <DataPageV2 kind="transactions"/>}/><Route path="/customers" component={() => <DataPageV2 kind="customers"/>}/><Route path="/merchants" component={() => <DataPageV2 kind="merchants"/>}/><Route path="/reports" component={ReportsV2}/><Route path="/analytics" component={AnalyticsV2}/><Route path="/knowledge" component={CompanyKnowledgePage}/><Route path="/assistant" component={AssistantPage}/><Route path="/profile" component={ProfilePage}/><Route path="/notifications" component={NotificationsPage}/><Route path="/settings" component={SettingsV2}/><Route component={NotFound}/></Switch></Shell>;
+  const { user } = usePlatform();
+  const owner = isPlatformOwner(user.email);
+  return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/platform-admin" component={PlatformAdminPage}/><Route path="/ai-employees" component={AIDirectory}/><Route path="/ai-employees/builder" component={EmployeeBuilderPage}/>{roster.map((employee) => <Route key={`${employee.id}-details`} path={`/ai-employees/${employee.id}/details`} component={() => <EmployeeDetailsPage employee={employee}/>}/>)}{roster.map((employee) => <Route key={employee.id} path={`/ai-employees/${employee.id}`} component={() => <AIWorkspace employee={employee}/>}/>)}<Route path="/transactions" component={() => <DataPageV2 kind="transactions"/>}/><Route path="/customers" component={() => <DataPageV2 kind="customers"/>}/>{owner && <Route path="/merchants" component={() => <DataPageV2 kind="merchants"/>}/>}<Route path="/reports" component={ReportsV2}/><Route path="/analytics" component={AnalyticsV2}/><Route path="/knowledge" component={CompanyKnowledgePage}/><Route path="/assistant" component={AssistantPage}/><Route path="/profile" component={ProfilePage}/><Route path="/notifications" component={NotificationsPage}/><Route path="/settings" component={SettingsV2}/><Route component={NotFound}/></Switch></Shell>;
 }
 
 function Root() {
-  const sessionValid = () => localStorage.getItem('finos-auth') === '1' && Date.now() - Number(localStorage.getItem('finos-auth-at') || 0) < 8 * 60 * 60 * 1000;
-  const [authed,setAuthed]=useState(sessionValid);
-  const [location,setLocation]=useLocation();
-  useEffect(()=>{if(!authed&&location!=='/login')setLocation('/login');},[authed,location,setLocation]);
-  useEffect(()=>{if (!authed) return; const interval = window.setInterval(() => { if (!sessionValid()) { localStorage.removeItem('finos-auth'); localStorage.removeItem('finos-auth-at'); setAuthed(false); setLocation('/login'); toast.info('Your session expired. Please sign in again.'); } }, 60_000); return () => window.clearInterval(interval); }, [authed, setLocation]);
-  if(!authed) return <Route path="/login"><Login onLogin={()=>{setAuthed(true);setLocation('/')}}/></Route>;
-  return <PlatformProvider><EmployeesProvider><AppRouter onLogout={()=>{localStorage.removeItem('finos-auth');localStorage.removeItem('finos-auth-at');setAuthed(false);setLocation('/login')}}/></EmployeesProvider></PlatformProvider>;
+  const sessionValid = () => {
+    const hasSession = localStorage.getItem('finos-auth') === '1';
+    const at = Number(localStorage.getItem('finos-auth-at') || 0);
+    const activeAccount = localStorage.getItem(ACTIVE_ACCOUNT_KEY);
+    return hasSession && Boolean(activeAccount) && Date.now() - at < 8 * 60 * 60 * 1000;
+  };
+  const [authed, setAuthed] = useState(sessionValid);
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!authed && location !== '/login') setLocation('/login');
+  }, [authed, location, setLocation]);
+
+  useEffect(() => {
+    if (!authed) return;
+    const interval = window.setInterval(() => {
+      if (!sessionValid()) {
+        localStorage.removeItem('finos-auth');
+        localStorage.removeItem('finos-auth-at');
+        localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+        setAuthed(false);
+        setLocation('/login');
+        toast.info('Your session expired. Please sign in again.');
+      }
+    }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [authed, setLocation]);
+
+  if (!authed) return <Route path="/login"><Login onLogin={() => { setAuthed(true); setLocation('/'); }}/></Route>;
+
+  return <PlatformProvider><EmployeesProvider><AppRouter onLogout={() => { localStorage.removeItem('finos-auth'); localStorage.removeItem('finos-auth-at'); localStorage.removeItem(ACTIVE_ACCOUNT_KEY); setAuthed(false); setLocation('/login'); }}/></EmployeesProvider></PlatformProvider>;
 }
 
 function FinOSVisualTheme() {
