@@ -12,7 +12,7 @@ import {
   ShieldCheck, Sparkles, Target, TrendingUp, UserRound, Users, WalletCards, X, Zap,
   ArrowUpDown, CheckCircle2, ClipboardList, Grid2X2, List, Pencil, Power, Trash2,
   UserPlus, LineChart, CalendarDays, Clock4, Moon, Sun, User, UserCog, SlidersHorizontal,
-  FileDown, MessageCircle, CheckCheck, CircleAlert, FileUp
+  FileDown, MessageCircle, CheckCheck, CircleAlert, FileUp, KeyRound, Phone, Mail
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
 import { PlatformProvider, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
@@ -34,6 +34,8 @@ const PLATFORM_OWNER_EMAIL = 'seifdyago@gmail.com';
 const PLATFORM_OWNER_PASSWORD_HASH = 'f5c300c99642e85eb995fda3f0bf88cf9002b16656344619ae4dba167750cc7e';
 const AUTH_ACCOUNTS_KEY = 'finos-auth-accounts-v2';
 const ACTIVE_ACCOUNT_KEY = 'finos-active-account-v2';
+const PASSWORD_RESET_KEY = 'finos-password-reset-v1';
+const TEST_OTP = '123456';
 const MERCHANT_CREDENTIALS_KEY = 'finos-merchant-credential-verifiers-v1';
 
 type StoredAuthAccount = {
@@ -46,6 +48,7 @@ type StoredAuthAccount = {
   tenantId: string;
   tenantName: string;
   idDocument?: { name: string; type: string; size: number };
+  phone?: string;
   createdAt: string;
 };
 
@@ -1090,7 +1093,16 @@ function AssistantPage() {
 function Login({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetPhone, setResetPhone] = useState('');
+  const [resetIdName, setResetIdName] = useState('');
+  const [resetOtp, setResetOtp] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetStep, setResetStep] = useState<1 | 2>(1);
   const [onboarding, setOnboarding] = useState(false);
   const [accountType, setAccountType] = useState<'company' | 'individual'>('company');
   const [step, setStep] = useState(1);
@@ -1156,13 +1168,15 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setOnboarding(true);
     setStep(1);
     setPassword('');
+    setConfirmPassword('');
+    setPhone('');
     setIdDocument(null);
   };
 
   const nextOnboardingStep = () => {
     setError('');
-    if (step === 1 && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email)) || password.length < 8 || !fullName.trim())) {
-      setError('Enter your name, a valid email, and a password of at least 8 characters.');
+    if (step === 1 && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email)) || password.length < 8 || password !== confirmPassword || !fullName.trim() || !/^\+?[0-9\s-]{8,15}$/.test(phone.trim()))) {
+      setError('Enter your name, a valid email, a valid phone number, and matching passwords of at least 8 characters.');
       return;
     }
     if (step === 2 && (accountType === 'company' ? (!companyName.trim() || !industry || !companySize || !subscription) : !idDocument)) {
@@ -1218,6 +1232,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         tenantId,
         tenantName,
         idDocument: { name: idDocument.name, type: idDocument.type, size: idDocument.size },
+        phone: phone.trim(),
         createdAt: new Date().toISOString(),
       };
       saveStoredAccounts([...existing, account]);
@@ -1228,6 +1243,38 @@ function Login({ onLogin }: { onLogin: () => void }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const requestPasswordReset = () => {
+    setError('');
+    const account = getStoredAccounts().find((candidate) => normalizeEmail(candidate.email) === normalizeEmail(resetEmail));
+    if (!account || !account.phone || account.phone.replace(/\D/g, '') !== resetPhone.replace(/\D/g, '') || !account.idDocument || account.idDocument.name !== resetIdName.trim()) {
+      setError('The email, phone number, and ID/document details do not match a registered account.');
+      return;
+    }
+    localStorage.setItem(PASSWORD_RESET_KEY, JSON.stringify({ email: account.email, otp: TEST_OTP, createdAt: Date.now() }));
+    setResetStep(2);
+    toast.success(`Test verification code: ${TEST_OTP}`);
+  };
+
+  const completePasswordReset = async () => {
+    const stored = localStorage.getItem(PASSWORD_RESET_KEY);
+    let reset: { email: string; otp: string; createdAt: number } | null = null;
+    try { reset = stored ? JSON.parse(stored) as { email: string; otp: string; createdAt: number } : null; } catch { reset = null; }
+    if (!reset || Date.now() - reset.createdAt > 10 * 60 * 1000 || resetOtp !== reset.otp || resetNewPassword.length < 8) {
+      setError('Enter the valid verification code and a new password of at least 8 characters.');
+      return;
+    }
+    const passwordHash = await hashPassword(resetNewPassword);
+    const accounts = getStoredAccounts().map((account) => normalizeEmail(account.email) === normalizeEmail(reset!.email) ? { ...account, passwordHash } : account);
+    saveStoredAccounts(accounts);
+    localStorage.removeItem(PASSWORD_RESET_KEY);
+    setForgotOpen(false);
+    setResetStep(1);
+    setResetOtp('');
+    setResetNewPassword('');
+    setError('');
+    toast.success('Password reset successfully. You can sign in now.');
   };
 
   const fieldClass = 'input-dark h-11 w-full rounded-lg px-3 text-sm';
@@ -1244,6 +1291,8 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <label className="block"><span className="kicker mb-2 block">Full name</span><input autoFocus value={fullName} onChange={(event) => setFullName(event.target.value)} className={fieldClass} placeholder="Your full name" data-testid="input-signup-name"/></label>
         <label className="block"><span className="kicker mb-2 block">Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className={fieldClass} placeholder="you@company.com" data-testid="input-signup-email"/></label>
         <label className="block"><span className="kicker mb-2 block">Password</span><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" className={fieldClass} placeholder="At least 8 characters" data-testid="input-signup-password"/></label>
+        <label className="block"><span className="kicker mb-2 block">Confirm password</span><input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" className={fieldClass} placeholder="Repeat your password" data-testid="input-signup-confirm-password"/></label>
+        <label className="block"><span className="kicker mb-2 block">Phone number</span><input value={phone} onChange={(event) => setPhone(event.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000" data-testid="input-signup-phone"/></label>
         <div className="grid gap-2 sm:grid-cols-2"><button onClick={() => setAccountType('company')} className={`rounded-lg border px-3 py-3 text-left text-[11px] ${accountType === 'company' ? 'border-[#8b5cf6] bg-[#21183f] text-white' : 'border-[#24465c] text-[#7892a5]'}`}><b>Company</b><span className="mt-1 block">Subscription workspace</span></button><button onClick={() => setAccountType('individual')} className={`rounded-lg border px-3 py-3 text-left text-[11px] ${accountType === 'individual' ? 'border-[#8b5cf6] bg-[#21183f] text-white' : 'border-[#24465c] text-[#7892a5]'}`}><b>Individual</b><span className="mt-1 block">Merchant / small business</span></button></div>
       </div>}
       {step === 2 && accountType === 'company' && <div className="space-y-4">
@@ -1258,12 +1307,33 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'basic' | 'premium')} className={fieldClass}><option value="basic">Basic subscription</option><option value="premium">Premium subscription</option></select></label>
         <label><span className="kicker mb-2 block">ID card / identity document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-individual-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name} • ready to attach</span>}</label>
       </div>}
-      {step === 3 && <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">Password is stored only as a SHA-256 verifier in this frontend demo. Production authentication and document storage must be handled by the server.</div></div></div>}
+      {step === 3 && <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Phone</span><span className="text-right text-[#e2e8f0]">{phone}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">Password is stored only as a SHA-256 verifier in this frontend demo. Production authentication and document storage must be handled by the server.</div></div></div>}
       {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
       <button onClick={step === 3 ? createAccount : nextOnboardingStep} disabled={loading} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm">{loading ? <RefreshCw size={15} className="animate-spin"/> : step === 3 ? <UserPlus size={15}/> : <ArrowUpRight size={15}/>} {loading ? 'Creating account...' : step === 3 ? 'Create account' : 'Continue'}</button>
       {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]">Previous step</button>}
     </>
   );
+
+  if (forgotOpen) {
+    return <div className="noise flex min-h-[100dvh] items-center justify-center bg-[#07111f] px-5">
+      <div className="w-full max-w-[430px] rounded-2xl border border-[#29465d] bg-[#0d1020] p-6 shadow-2xl">
+        <div className="mb-6 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#26194d] text-[#a78bfa]"><KeyRound size={18}/></div><div><div className="kicker">Account recovery</div><h2 className="display-font text-[25px] font-semibold text-white">Reset your password.</h2></div></div>
+        {resetStep === 1 ? <div className="space-y-4">
+          <label className="block"><span className="kicker mb-2 block">Email</span><input value={resetEmail} onChange={e=>setResetEmail(e.target.value)} type="email" className={fieldClass} placeholder="you@company.com"/></label>
+          <label className="block"><span className="kicker mb-2 block">Registered phone</span><input value={resetPhone} onChange={e=>setResetPhone(e.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000"/></label>
+          <label className="block"><span className="kicker mb-2 block">ID/document filename</span><input value={resetIdName} onChange={e=>setResetIdName(e.target.value)} className={fieldClass} placeholder="The document used at registration"/></label>
+          <p className="text-[10px] leading-5 text-[#71899d]">Test mode: a verification code is generated locally. Production SMS/identity verification must be handled by the backend.</p>
+          <button onClick={requestPasswordReset} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm"><Phone size={15}/> Verify account</button>
+        </div> : <div className="space-y-4">
+          <label className="block"><span className="kicker mb-2 block">Verification code</span><input value={resetOtp} onChange={e=>setResetOtp(e.target.value)} inputMode="numeric" className={fieldClass} placeholder="123456"/></label>
+          <label className="block"><span className="kicker mb-2 block">New password</span><input value={resetNewPassword} onChange={e=>setResetNewPassword(e.target.value)} type="password" className={fieldClass} placeholder="At least 8 characters"/></label>
+          <button onClick={() => void completePasswordReset()} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm"><KeyRound size={15}/> Reset password</button>
+        </div>}
+        {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
+        <button onClick={()=>{setForgotOpen(false);setError('')}} className="btn-quiet mt-3 h-10 w-full rounded-lg text-[11px]">Back to sign in</button>
+      </div>
+    </div>;
+  }
 
   return (
     <div className="noise flex min-h-[100dvh] bg-[#07111f]">
@@ -1291,6 +1361,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
                 <label className="block"><span className="kicker mb-2 block">Email</span><input autoFocus value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@company.com" className={fieldClass} data-testid="input-login-email"/></label>
                 <label className="block"><span className="kicker mb-2 block">Password</span><input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Your password" className={fieldClass} onKeyDown={(event) => event.key === 'Enter' && void enter()} data-testid="input-login-password"/></label>
                 <button onClick={() => void enter()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-login">{loading ? <RefreshCw size={15} className="animate-spin"/> : <ArrowUpRight size={15}/>} {loading ? 'Signing in...' : 'Sign in'}</button>
+                <button onClick={() => { setForgotOpen(true); setError(''); setResetStep(1); }} className="mx-auto flex items-center gap-2 text-[11px] text-[#a78bfa] hover:text-white" data-testid="button-forgot-password"><KeyRound size={13}/> Forgot password?</button>
                 <button onClick={() => beginOnboarding('company')} className="btn-quiet mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-create-company"><Building2 size={15}/> Create company account</button>
                 <button onClick={() => beginOnboarding('individual')} className="btn-quiet flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-create-individual"><UserPlus size={15}/> Create individual / merchant account</button>
                 {error && <div className="rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
