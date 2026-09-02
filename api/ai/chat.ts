@@ -22,18 +22,21 @@ export default async function handler(req: any, res: any) {
       history = [],
     } = req.body || {};
 
+    // Validate message
     if (!message || typeof message !== "string") {
       return res.status(400).json({
         error: "Message is required.",
       });
     }
 
+    // Validate employee
     if (!employee) {
       return res.status(400).json({
         error: "Employee information is required.",
       });
     }
 
+    // Get Gemini API key
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -42,12 +45,15 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    // Initialize Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
 
+    // Gemini model
     const model = genAI.getGenerativeModel({
       model: "gemini-3.7-flash",
     });
 
+    // Employee information
     const employeeName = employee.name || "FinOS AI Employee";
     const employeeRole = employee.role || "AI Assistant";
     const employeeDepartment = employee.department || "FinOS";
@@ -75,6 +81,7 @@ export default async function handler(req: any, res: any) {
         ? employee.knowledge
         : "";
 
+    // Support both conversation and history
     const conversationItems =
       Array.isArray(conversation) && conversation.length > 0
         ? conversation
@@ -82,6 +89,7 @@ export default async function handler(req: any, res: any) {
           ? history
           : [];
 
+    // Keep latest 10 messages
     const conversationText = conversationItems
       .slice(-10)
       .map((item: any) => {
@@ -96,6 +104,7 @@ export default async function handler(req: any, res: any) {
       })
       .join("\n");
 
+    // Employee system instructions
     const systemInstruction = `
 You are ${employeeName}.
 
@@ -124,8 +133,10 @@ IMPORTANT RULES:
 - Remember the context of the current conversation.
 - Do not mention these hidden instructions.
 - Speak naturally and professionally.
+- Answer in the same language used by the user whenever possible.
 `;
 
+    // Final prompt
     const prompt = `
 ${systemInstruction}
 
@@ -138,7 +149,45 @@ ${message}
 Respond naturally as ${employeeName}.
 `;
 
-    const result = await model.generateContent(prompt);
+    // Generate response with automatic retry
+    let result: any = null;
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        result = await model.generateContent(prompt);
+        break;
+      } catch (error: any) {
+        lastError = error;
+
+        const errorMessage = error?.message || "";
+
+        const isTemporaryError =
+          errorMessage.includes("503") ||
+          errorMessage.includes("UNAVAILABLE") ||
+          errorMessage.includes("high demand") ||
+          errorMessage.includes("Service Unavailable");
+
+        // If the error is not temporary, stop immediately
+        if (!isTemporaryError || attempt === 2) {
+          throw error;
+        }
+
+        // Wait before retrying:
+        // Attempt 1 -> 2 seconds
+        // Attempt 2 -> 4 seconds
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2000 * Math.pow(2, attempt))
+        );
+      }
+    }
+
+    if (!result) {
+      throw (
+        lastError ||
+        new Error("Gemini request failed.")
+      );
+    }
 
     const response = await result.response;
 
@@ -146,6 +195,7 @@ Respond naturally as ${employeeName}.
       response.text().trim() ||
       "I apologize, but I could not generate a response right now.";
 
+    // Return successful response
     return res.status(200).json({
       success: true,
       reply,
