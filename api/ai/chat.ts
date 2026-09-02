@@ -1,5 +1,6 @@
 // FinOS AI Employee Backend
 // Vercel Serverless Function
+
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 declare const process: {
@@ -7,6 +8,7 @@ declare const process: {
 };
 
 export default async function handler(req: any, res: any) {
+  // Only POST requests are allowed
   if (req.method !== "POST") {
     return res.status(405).json({
       error: "Method not allowed. Use POST.",
@@ -18,20 +20,24 @@ export default async function handler(req: any, res: any) {
       message,
       employee,
       conversation = [],
+      history = [],
     } = req.body || {};
 
+    // Validate message
     if (!message || typeof message !== "string") {
       return res.status(400).json({
         error: "Message is required.",
       });
     }
 
+    // Validate employee
     if (!employee) {
       return res.status(400).json({
         error: "Employee information is required.",
       });
     }
 
+    // Get Gemini API key
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -40,10 +46,15 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Initialize Official SDK
+    // Initialize Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+    // Current Gemini model
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.7-flash",
+    });
+
+    // Employee information
     const employeeName = employee.name || "FinOS AI Employee";
     const employeeRole = employee.role || "AI Assistant";
     const employeeDepartment = employee.department || "FinOS";
@@ -71,22 +82,31 @@ export default async function handler(req: any, res: any) {
         ? employee.knowledge
         : "";
 
-    const conversationText = Array.isArray(conversation)
-      ? conversation
-          .slice(-10)
-          .map((item: any) => {
-            const role =
-              item.role === "user"
-                ? "User"
-                : employeeName;
+    // Frontend currently sends "history"
+    // but we also support "conversation"
+    const conversationItems =
+      Array.isArray(conversation) && conversation.length > 0
+        ? conversation
+        : Array.isArray(history)
+          ? history
+          : [];
 
-            return `${role}: ${
-              item.content || item.message || ""
-            }`;
-          })
-          .join("\n")
-      : "";
+    // Keep the latest 10 messages
+    const conversationText = conversationItems
+      .slice(-10)
+      .map((item: any) => {
+        const role =
+          item.role === "user"
+            ? "User"
+            : employeeName;
 
+        return `${role}: ${
+          item.content || item.message || ""
+        }`;
+      })
+      .join("\n");
+
+    // Employee system instructions
     const systemInstruction = `
 You are ${employeeName}.
 
@@ -117,12 +137,29 @@ IMPORTANT RULES:
 - Speak naturally and professionally.
 `;
 
-    const prompt = `${systemInstruction}\n\nConversation history:\n${conversationText}\n\nCurrent user message:\n${message}`;
+    // Final prompt
+    const prompt = `
+${systemInstruction}
 
+Conversation history:
+${conversationText || "No previous conversation."}
+
+Current user message:
+${message}
+
+Respond naturally as ${employeeName}.
+`;
+
+    // Generate response
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const reply = response.text().trim() || "I apologize, but I could not generate a response right now.";
 
+    const response = await result.response;
+
+    const reply =
+      response.text().trim() ||
+      "I apologize, but I could not generate a response right now.";
+
+    // Return response
     return res.status(200).json({
       success: true,
       reply,
@@ -133,6 +170,8 @@ IMPORTANT RULES:
       },
     });
   } catch (error: any) {
+    console.error("FinOS Gemini Error:", error);
+
     return res.status(500).json({
       error:
         error?.message ||
