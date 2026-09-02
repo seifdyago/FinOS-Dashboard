@@ -74,9 +74,13 @@ export default async function handler(req: any, res: any) {
           .slice(-10)
           .map((item: any) => {
             const role =
-              item.role === "user" ? "User" : employeeName;
+              item.role === "user"
+                ? "User"
+                : employeeName;
 
-            return `${role}: ${item.content || item.message || ""}`;
+            return `${role}: ${
+              item.content || item.message || ""
+            }`;
           })
           .join("\n")
       : "";
@@ -151,8 +155,6 @@ ${message}`,
     const data = await geminiResponse.json();
 
     if (!geminiResponse.ok) {
-      console.error("Gemini API Error:", data);
-
       return res.status(geminiResponse.status || 500).json({
         error:
           data?.error?.message ||
@@ -177,8 +179,6 @@ ${message}`,
       },
     });
   } catch (error: any) {
-    console.error("FinOS AI Backend Error:", error);
-
     return res.status(500).json({
       error:
         error?.message ||
