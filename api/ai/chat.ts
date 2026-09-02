@@ -135,7 +135,7 @@ ${message}`,
     ];
 
     const geminiResponse = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent",
       {
         method: "POST",
         headers: {
