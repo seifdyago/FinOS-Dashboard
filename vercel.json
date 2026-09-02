@@ -1,4 +1,15 @@
 {
+  "version": 2,
   "buildCommand": "pnpm run build",
-  "outputDirectory": "artifacts/finos-ai/dist"
+  "outputDirectory": "artifacts/finos-ai/dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
