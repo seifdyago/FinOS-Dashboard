@@ -8,7 +8,6 @@ declare const process: {
 };
 
 export default async function handler(req: any, res: any) {
-  // Only POST requests are allowed
   if (req.method !== "POST") {
     return res.status(405).json({
       error: "Method not allowed. Use POST.",
@@ -23,21 +22,18 @@ export default async function handler(req: any, res: any) {
       history = [],
     } = req.body || {};
 
-    // Validate message
     if (!message || typeof message !== "string") {
       return res.status(400).json({
         error: "Message is required.",
       });
     }
 
-    // Validate employee
     if (!employee) {
       return res.status(400).json({
         error: "Employee information is required.",
       });
     }
 
-    // Get Gemini API key
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -46,15 +42,12 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Initialize Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // Current Gemini model
     const model = genAI.getGenerativeModel({
       model: "gemini-3.7-flash",
     });
 
-    // Employee information
     const employeeName = employee.name || "FinOS AI Employee";
     const employeeRole = employee.role || "AI Assistant";
     const employeeDepartment = employee.department || "FinOS";
@@ -82,8 +75,6 @@ export default async function handler(req: any, res: any) {
         ? employee.knowledge
         : "";
 
-    // Frontend currently sends "history"
-    // but we also support "conversation"
     const conversationItems =
       Array.isArray(conversation) && conversation.length > 0
         ? conversation
@@ -91,7 +82,6 @@ export default async function handler(req: any, res: any) {
           ? history
           : [];
 
-    // Keep the latest 10 messages
     const conversationText = conversationItems
       .slice(-10)
       .map((item: any) => {
@@ -106,7 +96,6 @@ export default async function handler(req: any, res: any) {
       })
       .join("\n");
 
-    // Employee system instructions
     const systemInstruction = `
 You are ${employeeName}.
 
@@ -137,7 +126,6 @@ IMPORTANT RULES:
 - Speak naturally and professionally.
 `;
 
-    // Final prompt
     const prompt = `
 ${systemInstruction}
 
@@ -150,7 +138,6 @@ ${message}
 Respond naturally as ${employeeName}.
 `;
 
-    // Generate response
     const result = await model.generateContent(prompt);
 
     const response = await result.response;
@@ -159,7 +146,6 @@ Respond naturally as ${employeeName}.
       response.text().trim() ||
       "I apologize, but I could not generate a response right now.";
 
-    // Return response
     return res.status(200).json({
       success: true,
       reply,
@@ -170,8 +156,6 @@ Respond naturally as ${employeeName}.
       },
     });
   } catch (error: any) {
-    console.error("FinOS Gemini Error:", error);
-
     return res.status(500).json({
       error:
         error?.message ||
