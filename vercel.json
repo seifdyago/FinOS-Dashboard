@@ -1,12 +1,8 @@
 {
   "version": 2,
-  "buildCommand": "pnpm run build",
-  "outputDirectory": "artifacts/finos-ai/dist",
+  "buildCommand": "pnpm --filter @workspace/finos-ai build",
+  "outputDirectory": "artifacts/finos-ai/dist/public",
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
