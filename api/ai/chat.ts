@@ -150,41 +150,52 @@ ${message}
 Respond naturally as ${employeeName}.
 `;
 
-    // Generate response with automatic retry
+    // Generate response with automatic retry for temporary 503 errors
     let result: any = null;
     let lastError: any = null;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const maxAttempts = 5;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         result = await model.generateContent(prompt);
         break;
       } catch (error: any) {
         lastError = error;
 
-        const errorMessage = error?.message || "";
+        const errorMessage = String(error?.message || "").toLowerCase();
 
         const isTemporaryError =
           errorMessage.includes("503") ||
-          errorMessage.includes("UNAVAILABLE") ||
+          errorMessage.includes("unavailable") ||
           errorMessage.includes("high demand") ||
-          errorMessage.includes("Service Unavailable");
+          errorMessage.includes("service unavailable") ||
+          errorMessage.includes("overloaded") ||
+          errorMessage.includes("temporarily");
 
-        // If the error is not temporary, stop immediately
-        if (!isTemporaryError || attempt === 2) {
+        // Stop immediately for non-temporary errors
+        if (!isTemporaryError || attempt === maxAttempts - 1) {
           throw error;
         }
 
-        // Wait before retrying:
-        // Attempt 1 -> 2 seconds
-        // Attempt 2 -> 4 seconds
-        await delay(2000 * Math.pow(2, attempt));
+        // Exponential backoff:
+        // Retry 1 -> 2 seconds
+        // Retry 2 -> 4 seconds
+        // Retry 3 -> 8 seconds
+        // Retry 4 -> 16 seconds
+        const waitTime = Math.min(
+          2000 * Math.pow(2, attempt),
+          30000
+        );
+
+        await delay(waitTime);
       }
     }
 
     if (!result) {
       throw (
         lastError ||
-        new Error("Gemini request failed.")
+        new Error("Gemini request failed after multiple retries.")
       );
     }
 
