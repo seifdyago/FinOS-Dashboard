@@ -1,31 +1,22 @@
-import express from "express";
-import cors from "cors";
-import pinoHttp from "pino-http";
-import cookieParser from "cookie-parser";
+import { Router } from "express";
+import { generateAiResponse } from "../lib/gemini.js";
 
-import { logger } from "./lib/logger.js";
-import healthRouter from "./routes/health.js";
-import activityRouter from "./routes/activity.js";
-import knowledgeFilesRouter from "./routes/knowledge-files.js";
-import onboardingRouter from "./routes/onboarding.js";
-import platformAdminRouter from "./routes/platform-admin.js";
-import aiRouter from "./routes/ai.js";
+const router = Router();
 
-export const app = express();
+router.post("/chat", async (req, res) => {
+  try {
+    const { prompt } = req.body;
 
-app.use(cors());
-app.use(express.json());
-app.use(cookieParser());
-app.use(pinoHttp({ logger }));
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
 
-// API Routes
-app.use("/api/health", healthRouter);
-app.use("/api/activity", activityRouter);
-app.use("/api/knowledge-files", knowledgeFilesRouter);
-app.use("/api/onboarding", onboardingRouter);
-app.use("/api/platform-admin", platformAdminRouter);
+    const aiResponse = await generateAiResponse(prompt);
+    return res.json({ message: aiResponse });
+  } catch (error) {
+    console.error("AI Route Error:", error);
+    return res.status(500).json({ error: "Failed to generate AI response" });
+  }
+});
 
-// Gemini 1.5 AI Chat Route
-app.use("/api/ai", aiRouter);
-
-export default app;
+export default router;
