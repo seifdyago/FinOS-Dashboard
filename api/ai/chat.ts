@@ -2,6 +2,7 @@
 // Vercel Serverless Function
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { setTimeout as delay } from "node:timers/promises";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -176,9 +177,7 @@ Respond naturally as ${employeeName}.
         // Wait before retrying:
         // Attempt 1 -> 2 seconds
         // Attempt 2 -> 4 seconds
-        await new Promise((resolve) =>
-          setTimeout(resolve, 2000 * Math.pow(2, attempt))
-        );
+        await delay(2000 * Math.pow(2, attempt));
       }
     }
 
