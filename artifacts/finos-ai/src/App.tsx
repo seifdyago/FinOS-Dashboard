@@ -162,17 +162,18 @@ const EmployeesContext = createContext<EmployeeContextValue | null>(null);
 const employeeRoleKey = (role: string) => role.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
 
-const employeeAvatarUrl = (employee: Pick<Employee, 'id' | 'name' | 'avatar'>) => {
+const employeeAvatarUrl = (employee: Pick<Employee, 'id' | 'name' | 'avatar' | 'role'>) => {
   const custom = (employee.avatar || '').trim();
   if (/^https?:\/\//i.test(custom) || custom.startsWith('/')) return custom;
-  return `https://api.dicebear.com/9.x/personas/svg?seed=${encodeURIComponent(employee.name || employee.id)}&backgroundType=gradientLinear`;
+  const seed = `${employee.name || employee.id}-${employee.role || 'FinOS'}`;
+  return `https://api.dicebear.com/9.x/personas/svg?seed=${encodeURIComponent(seed)}&backgroundType=gradientLinear&radius=50&eyes=variant01,variant02,variant03,variant04&mouth=variant01,variant02,variant03`;
 };
 
 function EmployeeAvatar({ employee, className = 'h-10 w-10', fallbackClassName = '' }: { employee: Employee; className?: string; fallbackClassName?: string }) {
   const [failed, setFailed] = useState(false);
   const src = employeeAvatarUrl(employee);
   if (failed) return <div className={`grid place-items-center rounded-full font-bold ${fallbackClassName}`}>{employee.initials}</div>;
-  return <img src={src} alt={`${employee.name} avatar`} onError={() => setFailed(true)} className={`shrink-0 rounded-full object-cover ${className}`} referrerPolicy="no-referrer"/>;
+  return <div className="relative shrink-0"><img src={src} alt={`${employee.name} portrait`} onError={() => setFailed(true)} className={`rounded-full object-cover shadow-lg ring-2 ring-white/10 ${className}`} referrerPolicy="no-referrer"/><span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0c1020] bg-emerald-400" title="Online"/></div>;
 }
 
 function EmployeesProvider({ children }: { children: ReactNode }) {
@@ -807,7 +808,26 @@ function EmployeeCalendarPanel({ employee, day, setDay }: { employee: Employee; 
 }
 
 function EmployeeChatPanel({ employee, message, setMessage, sent, responses, loading, send, notifications, setNotifications }: { employee: Employee; message: string; setMessage: (value: string) => void; sent: string[]; responses: string[]; loading: boolean; send: () => void; notifications: boolean; setNotifications: (value: boolean) => void }) {
-  return <div className="panel mx-auto flex min-h-[420px] max-w-[900px] flex-col p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">AI chat</div><div className="flex items-center gap-2 text-sm font-semibold text-[#deedf1]"><EmployeeAvatar employee={employee} className="h-8 w-8" fallbackClassName="h-8 w-8 bg-[#274357] text-[10px]"/> Talk to {employee.name}</div></div><button onClick={() => { setNotifications(!notifications); toast.info(`Notifications ${notifications ? 'muted' : 'enabled'}`); }} className={`rounded-md p-2 ${notifications ? 'text-[#8b5cf6]' : 'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-chat-notifications"><Bell size={15}/></button></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="max-w-[80%] rounded-lg rounded-tl-none bg-[#122738] p-3">I’m {employee.name}, your {employee.role}. I’m ready to help using my assigned knowledge and responsibilities.</p>{sent.map((item,index)=><div key={`${item}-${index}`}><p className="ml-auto max-w-[80%] rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{item}</p>{responses[index] && <p className="mt-2 max-w-[80%] rounded-lg rounded-tl-none bg-[#122738] p-3 text-[#d5e5eb]">{responses[index]}</p>}</div>)}{loading && <div className="flex items-center gap-2 text-[11px] text-[#8b5cf6]"><Loader2 size={14} className="animate-spin"/> {employee.name} is thinking…</div>}</div><div className="mt-5 flex gap-2"><input value={message} disabled={loading} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-xs disabled:opacity-60" placeholder={`Ask ${employee.name} about ${employee.role} work...`} data-testid={`input-chat-${employee.id}`}/><button onClick={send} disabled={loading} className="btn-primary grid h-10 w-10 place-items-center rounded-lg disabled:opacity-60" data-testid={`button-chat-send-${employee.id}`}>{loading?<Loader2 size={14} className="animate-spin"/>:<Send size={14}/>}</button></div></div>;
+  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      if (!loading && message.trim()) send();
+    }
+  };
+  return <div className="panel mx-auto flex min-h-[620px] max-w-[1000px] flex-col overflow-hidden p-0">
+    <div className="flex items-center justify-between border-b border-white/5 bg-gradient-to-r from-[#11172b] to-[#0c1020] px-5 py-4 md:px-6">
+      <div className="flex items-center gap-3"><EmployeeAvatar employee={employee} className="h-12 w-12" fallbackClassName="h-12 w-12 bg-[#274357] text-sm"/><div><div className="flex items-center gap-2 text-sm font-semibold text-[#edf6ff]">{employee.name}<span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-300">Online</span></div><div className="mt-1 text-[11px] text-[#8da5b4]">{employee.role} · {employee.department || 'FinOS AI Team'}</div></div></div>
+      <button onClick={() => { setNotifications(!notifications); toast.info(`Notifications ${notifications ? 'muted' : 'enabled'}`); }} className={`rounded-lg p-2 ${notifications ? 'bg-[#8b5cf6]/10 text-[#a78bfa]' : 'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-chat-notifications"><Bell size={16}/></button>
+    </div>
+    <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 text-[13px] leading-6 text-[#a9bfcc] md:px-6">
+      <div className="flex max-w-[88%] items-end gap-2"><EmployeeAvatar employee={employee} className="h-8 w-8" fallbackClassName="h-8 w-8 bg-[#274357] text-[10px]"/><div><div className="mb-1 text-[10px] font-medium text-[#718b9f]">{employee.name}</div><p className="rounded-2xl rounded-bl-md border border-white/5 bg-[#122738] px-4 py-3 text-[#d8e7ed] shadow-sm">Hello. I’m {employee.name}, your {employee.role}. I’m online and ready to help using my assigned knowledge, responsibilities, and professional context.</p></div></div>
+      {sent.map((item,index)=><div key={`${item}-${index}`} className="space-y-3"><div className="ml-auto max-w-[88%]"><div className="mb-1 text-right text-[10px] text-[#718b9f]">You</div><p className="rounded-2xl rounded-br-md bg-gradient-to-br from-[#8b5cf6] to-[#6366f1] px-4 py-3 text-white shadow-md">{item}</p></div>{responses[index] && <div className="flex max-w-[88%] items-end gap-2"><EmployeeAvatar employee={employee} className="h-8 w-8" fallbackClassName="h-8 w-8 bg-[#274357] text-[10px]"/><div><div className="mb-1 text-[10px] font-medium text-[#718b9f]">{employee.name}</div><p className="rounded-2xl rounded-bl-md border border-white/5 bg-[#122738] px-4 py-3 text-[#d5e5eb] shadow-sm">{responses[index]}</p></div></div>}</div>)}
+      {loading && <div className="flex items-center gap-3"><EmployeeAvatar employee={employee} className="h-8 w-8" fallbackClassName="h-8 w-8 bg-[#274357] text-[10px]"/><div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-[#122738] px-4 py-3 text-[11px] text-[#a78bfa]"><Loader2 size={14} className="animate-spin"/> {employee.name} is thinking…</div></div>}
+    </div>
+    <div className="border-t border-white/5 bg-[#0b0f1d] p-4 md:p-5"><div className="rounded-2xl border border-white/10 bg-[#10182a] p-2 shadow-inner"><textarea value={message} disabled={loading} onChange={(event) => setMessage(event.target.value)} onKeyDown={onKeyDown} rows={5} className="input-dark block min-h-[130px] w-full resize-y border-0 bg-transparent px-3 py-3 text-sm leading-6 text-[#edf6ff] outline-none disabled:opacity-60" placeholder={`Message ${employee.name}...
+
+Write as much as you need. Press Enter to send · Shift + Enter for a new line.`} data-testid={`input-chat-${employee.id}`}/><div className="flex items-center justify-between gap-3 px-2 pb-1"><span className="text-[10px] text-[#657e93]">AI employee · {employee.role}</span><button onClick={send} disabled={loading || !message.trim()} className="btn-primary flex h-10 items-center gap-2 rounded-xl px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50" data-testid={`button-chat-send-${employee.id}`}>{loading?<Loader2 size={15} className="animate-spin"/>:<Send size={15}/>} Send</button></div></div></div>
+  </div>;
 }
 
 function EmployeeAnalyticsPanel({ employee }: { employee: Employee }) {
