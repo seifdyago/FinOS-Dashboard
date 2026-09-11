@@ -118,6 +118,73 @@ function isPlatformOwner(email: string): boolean {
 
 type Icon = typeof Activity;
 
+type ChatAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  data: string;
+};
+
+const CHAT_MAX_FILE_SIZE = 25 * 1024 * 1024;
+const CHAT_MAX_TOTAL_SIZE = 50 * 1024 * 1024;
+
+function chatFileType(file: File): string {
+  if (file.type) return file.type;
+  const extension = file.name.toLowerCase().split('.').pop() || '';
+  const mimeByExtension: Record<string, string> = {
+    pdf: 'application/pdf',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    json: 'application/json',
+    xml: 'application/xml',
+    html: 'text/html',
+    htm: 'text/html',
+    md: 'text/markdown',
+    js: 'text/javascript',
+    ts: 'text/plain',
+    tsx: 'text/plain',
+    jsx: 'text/plain',
+    css: 'text/css',
+  };
+  return mimeByExtension[extension] || 'application/octet-stream';
+}
+
+function readChatFile(file: File): Promise<ChatAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      const comma = value.indexOf(',');
+      if (comma < 0) {
+        reject(new Error(`Could not prepare ${file.name} for upload.`));
+        return;
+      }
+      resolve({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        type: chatFileType(file),
+        size: file.size,
+        data: value.slice(comma + 1),
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatChatFileSize(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function isImageAttachment(attachment: ChatAttachment): boolean {
+  return attachment.type.startsWith('image/');
+}
+
+
 function reportWorkspaceActivity(
   organizationId: string,
   userEmail: string,
@@ -746,14 +813,49 @@ function AIWorkspace({ employee }: { employee:Employee }) {
   const [calendarDay,setCalendarDay]=useState('Today');
   const [reportCount,setReportCount]=useState(3);
   const [taskHistory,setTaskHistory]=useState([{task:employee.tasks[0],status:'Completed',time:'Today, 09:14'},{task:employee.tasks[1],status:'Completed',time:'Today, 08:42'},{task:employee.tasks[2],status:'In progress',time:'Today, 07:58'}]);
+  const [chatAttachments,setChatAttachments]=useState<File[]>([]);
+  const [sentAttachments,setSentAttachments]=useState<ChatAttachment[][]>([]);
   const { name, role, department, initials, color, accent, status, active, metric, metricLabel, description, tasks, skills, performance, lastActive } = liveEmployee;
+
+  const addChatFiles = (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    const incoming = Array.from(fileList);
+    const currentTotal = chatAttachments.reduce((sum, file) => sum + file.size, 0);
+    const accepted: File[] = [];
+    let total = currentTotal;
+    for (const file of incoming) {
+      if (file.size > CHAT_MAX_FILE_SIZE) {
+        toast.error(`${file.name} is larger than 25 MB.`);
+        continue;
+      }
+      if (total + file.size > CHAT_MAX_TOTAL_SIZE) {
+        toast.error('The total attachment size cannot exceed 50 MB per message.');
+        continue;
+      }
+      accepted.push(file);
+      total += file.size;
+    }
+    if (accepted.length) setChatAttachments((current) => [...current, ...accepted]);
+  };
+
+  const removeChatFile = (index: number) => {
+    setChatAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  };
+
   const send=async()=>{
     const userMessage=message.trim();
-    if(!userMessage || chatLoading) return;
-    const nextSent=[...sent,userMessage];
-    setSent(nextSent); setMessage(''); setChatLoading(true);
+    if((!userMessage && chatAttachments.length === 0) || chatLoading) return;
+    setChatLoading(true);
     try {
-      const response=await fetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employee:{id:liveEmployee.id,name:liveEmployee.name,role:liveEmployee.role,department:liveEmployee.department,personality:liveEmployee.personality,systemPrompt:liveEmployee.systemPrompt,skills:liveEmployee.skills,responsibilities:liveEmployee.responsibilities,knowledge:liveEmployee.knowledge},message:userMessage,history:nextSent.slice(-8)})});
+      const preparedAttachments = await Promise.all(chatAttachments.map(readChatFile));
+      const displayMessage = userMessage || `Attached ${preparedAttachments.length} file${preparedAttachments.length === 1 ? '' : 's'}`;
+      const nextSent=[...sent,displayMessage];
+      const nextSentAttachments=[...sentAttachments,preparedAttachments];
+      setSent(nextSent);
+      setSentAttachments(nextSentAttachments);
+      setMessage('');
+      setChatAttachments([]);
+      const response=await fetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employee:{id:liveEmployee.id,name:liveEmployee.name,role:liveEmployee.role,department:liveEmployee.department,personality:liveEmployee.personality,systemPrompt:liveEmployee.systemPrompt,skills:liveEmployee.skills,responsibilities:liveEmployee.responsibilities,knowledge:liveEmployee.knowledge},message:userMessage,history:nextSent.slice(-8),attachments:preparedAttachments.map(({id,name,type,size,data})=>({id,name,type,size,data}))})});
       const data=await response.json();
       if(!response.ok) throw new Error(data?.error || 'AI service unavailable');
       setResponses((current)=>[...current,String(data.reply || 'I could not generate a response.')]);
@@ -765,9 +867,9 @@ function AIWorkspace({ employee }: { employee:Employee }) {
   };
   return <div className="mx-auto max-w-[1320px]">
       <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div className="flex items-start gap-4"><EmployeeAvatar employee={liveEmployee} className="h-14 w-14 rounded-2xl" fallbackClassName="h-14 w-14 bg-[#163147] text-[14px]"/><div><div className="kicker mb-2">AI employee / profile</div><h1 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#f8fafc]">{name}</h1><div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[#8299ab]"><span className={`live-dot h-1.5 w-1.5 rounded-full ${active?'':'opacity-30'}`} style={{background:color}}/>{role} <span className="text-[#3c566d]">鈥�</span><span style={{color}}>{active ? status : 'Paused'}</span><span className="text-[#3c566d]">鈥�</span><span>{department}</span></div></div></div><div className="flex flex-wrap gap-2"><button onClick={() => setEditing(true)} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-edit-profile"><Pencil size={14}/> Edit profile</button><button onClick={() => { toggleEmployee(employee.id); toast.success(`${name} ${active ? 'deactivated' : 'activated'}`); }} className="btn-primary flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-toggle-profile"><Power size={14}/>{active ? 'Deactivate' : 'Activate'}</button><button onClick={()=>{setRunning(true);setTimeout(()=>setRunning(false),900);toast.success(`${name} is reviewing the latest context`)}} className="btn-primary flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs" data-testid="button-run-ai"><Sparkles size={14}/>{running?'Working...':'Ask for an update'}</button></div></div>
-    <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[#1a3246]"><button onClick={()=>setActiveTab('Overview')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Overview'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Overview</button><button onClick={()=>setActiveTab('Tasks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Tasks'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-profile-tasks-tab">Tasks</button><button onClick={()=>setActiveTab('Calendar')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Calendar'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-calendar-tab">Calendar</button><button onClick={()=>setActiveTab('Chat')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Chat'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-chat-tab">AI chat</button><button onClick={()=>setActiveTab('Analytics')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Analytics'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-analytics-tab">Analytics</button><button onClick={()=>setActiveTab('Activity')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Activity'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-activity-tab">Activity</button><button onClick={()=>setActiveTab('Playbooks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Playbooks'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-playbooks-tab">Playbooks</button><button onClick={()=>setActiveTab('Reports')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Reports'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-reports-tab">Reports</button><button onClick={()=>setActiveTab('Notifications')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Notifications'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-notifications-tab">Notifications</button><button onClick={()=>setActiveTab('Permissions')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Permissions'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-permissions-tab">Permissions</button><button onClick={()=>setActiveTab('Settings')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Settings'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-settings-tab">Settings</button>{liveEmployee.department === 'Human resources' && <button onClick={()=>setActiveTab('HR')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='HR'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>HR memory & communication</button>}</div>
+    <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[#1a3246]"><button onClick={()=>setActiveTab('Overview')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Overview'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Overview</button><button onClick={()=>setActiveTab('Tasks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Tasks'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-profile-tasks-tab">Tasks</button><button onClick={()=>setActiveTab('Calendar')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Calendar'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-calendar-tab">Calendar</button><button onClick={()=>setActiveTab('Chat')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Chat'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`} data-testid="button-ai-chat-tab">AI chat</button><button onClick={()=>setActiveTab('Analytics')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Analytics'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Analytics</button><button onClick={()=>setActiveTab('Activity')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Activity'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Activity</button><button onClick={()=>setActiveTab('Playbooks')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Playbooks'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Playbooks</button><button onClick={()=>setActiveTab('Reports')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Reports'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Reports</button><button onClick={()=>setActiveTab('Notifications')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Notifications'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Notifications</button><button onClick={()=>setActiveTab('Permissions')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Permissions'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Permissions</button><button onClick={()=>setActiveTab('Settings')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='Settings'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>Settings</button>{liveEmployee.department === 'Human resources' && <button onClick={()=>setActiveTab('HR')} className={`border-b-2 px-4 py-3 text-[12px] ${activeTab==='HR'?'border-[#8b5cf6] font-semibold text-[#a78bfa]':'border-transparent text-[#7892a5]'}`}>HR memory & communication</button>}</div>
     {activeTab==='Calendar' ? <EmployeeCalendarPanel employee={liveEmployee} day={calendarDay} setDay={setCalendarDay}/> :
-      activeTab==='Chat' ? <EmployeeChatPanel employee={liveEmployee} message={message} setMessage={setMessage} sent={sent} responses={responses} loading={chatLoading} send={send} notifications={notifications} setNotifications={setNotifications}/> :
+      activeTab==='Chat' ? <EmployeeChatPanel employee={liveEmployee} message={message} setMessage={setMessage} sent={sent} responses={responses} sentAttachments={sentAttachments} loading={chatLoading} send={send} notifications={notifications} setNotifications={setNotifications} attachments={chatAttachments} onAddFiles={addChatFiles} onRemoveFile={removeChatFile}/> :
       activeTab==='Analytics' ? <EmployeeAnalyticsPanel employee={liveEmployee}/> :
       activeTab==='Reports' ? <EmployeeReportsPanel employee={liveEmployee} reportCount={reportCount} setReportCount={setReportCount}/> :
       activeTab==='Notifications' ? <EmployeeNotificationsPanel employee={liveEmployee} notifications={notifications} setNotifications={setNotifications}/> :
@@ -807,11 +909,12 @@ function EmployeeCalendarPanel({ employee, day, setDay }: { employee: Employee; 
   </div>;
 }
 
-function EmployeeChatPanel({ employee, message, setMessage, sent, responses, loading, send, notifications, setNotifications }: { employee: Employee; message: string; setMessage: (value: string) => void; sent: string[]; responses: string[]; loading: boolean; send: () => void; notifications: boolean; setNotifications: (value: boolean) => void }) {
+function EmployeeChatPanel({ employee, message, setMessage, sent, responses, sentAttachments, loading, send, notifications, setNotifications, attachments, onAddFiles, onRemoveFile }: { employee: Employee; message: string; setMessage: (value: string) => void; sent: string[]; responses: string[]; sentAttachments: ChatAttachment[][]; loading: boolean; send: () => void; notifications: boolean; setNotifications: (value: boolean) => void; attachments: File[]; onAddFiles: (files: FileList | null) => void; onRemoveFile: (index: number) => void }) {
+  const fileInputId = `chat-files-${employee.id}`;
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      if (!loading && message.trim()) send();
+      if (!loading && (message.trim() || attachments.length)) send();
     }
   };
   return <div className="panel mx-auto flex min-h-[620px] max-w-[1000px] flex-col overflow-hidden p-0">
@@ -821,12 +924,14 @@ function EmployeeChatPanel({ employee, message, setMessage, sent, responses, loa
     </div>
     <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 text-[13px] leading-6 text-[#a9bfcc] md:px-6">
       <div className="flex max-w-[88%] items-end gap-2"><EmployeeAvatar employee={employee} className="h-8 w-8" fallbackClassName="h-8 w-8 bg-[#274357] text-[10px]"/><div><div className="mb-1 text-[10px] font-medium text-[#718b9f]">{employee.name}</div><p className="rounded-2xl rounded-bl-md border border-white/5 bg-[#122738] px-4 py-3 text-[#d8e7ed] shadow-sm">Hello. I’m {employee.name}, your {employee.role}. I’m online and ready to help using my assigned knowledge, responsibilities, and professional context.</p></div></div>
-      {sent.map((item,index)=><div key={`${item}-${index}`} className="space-y-3"><div className="ml-auto max-w-[88%]"><div className="mb-1 text-right text-[10px] text-[#718b9f]">You</div><p className="rounded-2xl rounded-br-md bg-gradient-to-br from-[#8b5cf6] to-[#6366f1] px-4 py-3 text-white shadow-md">{item}</p></div>{responses[index] && <div className="flex max-w-[88%] items-end gap-2"><EmployeeAvatar employee={employee} className="h-8 w-8" fallbackClassName="h-8 w-8 bg-[#274357] text-[10px]"/><div><div className="mb-1 text-[10px] font-medium text-[#718b9f]">{employee.name}</div><p className="rounded-2xl rounded-bl-md border border-white/5 bg-[#122738] px-4 py-3 text-[#d5e5eb] shadow-sm">{responses[index]}</p></div></div>}</div>)}
+      {sent.map((item,index)=><div key={`${item}-${index}`} className="space-y-3"><div className="ml-auto max-w-[92%]"><div className="mb-1 text-right text-[10px] text-[#718b9f]">You</div><div className="rounded-2xl rounded-br-md bg-gradient-to-br from-[#8b5cf6] to-[#6366f1] px-4 py-3 text-white shadow-md">{sentAttachments[index]?.length > 0 && <div className="mb-3 grid gap-2 sm:grid-cols-2">{sentAttachments[index].map((attachment)=><div key={attachment.id} className="overflow-hidden rounded-xl border border-white/10 bg-black/10">{isImageAttachment(attachment) ? <img src={`data:${attachment.type};base64,${attachment.data}`} alt={attachment.name} className="max-h-48 w-full object-cover"/> : <div className="flex items-center gap-3 p-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10"><FileText size={16}/></div><div className="min-w-0"><div className="truncate text-xs font-medium">{attachment.name}</div><div className="mt-0.5 text-[10px] text-white/60">{formatChatFileSize(attachment.size)}</div></div></div>}</div>)}</div>}<div className="whitespace-pre-wrap">{item}</div></div></div>{responses[index] && <div className="flex max-w-[88%] items-end gap-2"><EmployeeAvatar employee={employee} className="h-8 w-8" fallbackClassName="h-8 w-8 bg-[#274357] text-[10px]"/><div><div className="mb-1 text-[10px] font-medium text-[#718b9f]">{employee.name}</div><p className="whitespace-pre-wrap rounded-2xl rounded-bl-md border border-white/5 bg-[#122738] px-4 py-3 text-[#d5e5eb] shadow-sm">{responses[index]}</p></div></div>}</div>)}
       {loading && <div className="flex items-center gap-3"><EmployeeAvatar employee={employee} className="h-8 w-8" fallbackClassName="h-8 w-8 bg-[#274357] text-[10px]"/><div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-[#122738] px-4 py-3 text-[11px] text-[#a78bfa]"><Loader2 size={14} className="animate-spin"/> {employee.name} is thinking…</div></div>}
     </div>
-    <div className="border-t border-white/5 bg-[#0b0f1d] p-4 md:p-5"><div className="rounded-2xl border border-white/10 bg-[#10182a] p-2 shadow-inner"><textarea value={message} disabled={loading} onChange={(event) => setMessage(event.target.value)} onKeyDown={onKeyDown} rows={5} className="input-dark block min-h-[130px] w-full resize-y border-0 bg-transparent px-3 py-3 text-sm leading-6 text-[#edf6ff] outline-none disabled:opacity-60" placeholder={`Message ${employee.name}...
-
-Write as much as you need. Press Enter to send · Shift + Enter for a new line.`} data-testid={`input-chat-${employee.id}`}/><div className="flex items-center justify-between gap-3 px-2 pb-1"><span className="text-[10px] text-[#657e93]">AI employee · {employee.role}</span><button onClick={send} disabled={loading || !message.trim()} className="btn-primary flex h-10 items-center gap-2 rounded-xl px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50" data-testid={`button-chat-send-${employee.id}`}>{loading?<Loader2 size={15} className="animate-spin"/>:<Send size={15}/>} Send</button></div></div></div>
+    <div className="border-t border-white/5 bg-[#0b0f1d] p-4 md:p-5"><div className="rounded-2xl border border-white/10 bg-[#10182a] p-2 shadow-inner">
+      {attachments.length > 0 && <div className="mb-2 grid gap-2 px-2 pt-1 sm:grid-cols-2">{attachments.map((file,index)=><div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.03] p-2"><div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#18263a] text-[#a78bfa]">{file.type.startsWith('image/') ? <img src={URL.createObjectURL(file)} alt="" className="h-full w-full object-cover"/> : <FileText size={16}/>}</div><div className="min-w-0 flex-1"><div className="truncate text-[11px] text-[#dce9ef]">{file.name}</div><div className="text-[9px] text-[#687f92]">{formatChatFileSize(file.size)}</div></div><button type="button" onClick={() => onRemoveFile(index)} disabled={loading} className="rounded-lg p-1.5 text-[#71899d] hover:bg-[#3b2028] hover:text-[#ff9b90]" aria-label={`Remove ${file.name}`}><X size={13}/></button></div>)}</div>}
+      <textarea value={message} disabled={loading} onChange={(event) => setMessage(event.target.value)} onKeyDown={onKeyDown} rows={5} className="input-dark block min-h-[130px] w-full resize-y border-0 bg-transparent px-3 py-3 text-sm leading-6 text-[#edf6ff] outline-none disabled:opacity-60" placeholder={`Message ${employee.name}...\n\nWrite as much as you need. Press Enter to send · Shift + Enter for a new line.`} data-testid={`input-chat-${employee.id}`}/>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-2 pb-1"><div className="flex min-w-0 items-center gap-2"><label htmlFor={fileInputId} className={`btn-quiet flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-[10px] ${loading ? 'pointer-events-none opacity-50' : ''}`}><FileUp size={14}/> Attach files<input id={fileInputId} type="file" multiple className="hidden" disabled={loading} onChange={(event) => { onAddFiles(event.target.files); event.currentTarget.value=''; }}/></label><span className="truncate text-[10px] text-[#657e93]">All file types · max 25 MB each</span></div><button onClick={send} disabled={loading || (!message.trim() && attachments.length === 0)} className="btn-primary flex h-10 items-center gap-2 rounded-xl px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50" data-testid={`button-chat-send-${employee.id}`}>{loading?<Loader2 size={15} className="animate-spin"/>:<Send size={15}/>} Send</button></div>
+    </div></div>
   </div>;
 }
 
