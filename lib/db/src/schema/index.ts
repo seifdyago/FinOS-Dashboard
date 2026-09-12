@@ -7,4 +7,5 @@ export * from "./knowledge-documents";
 export * from "./platform-admins";
 export * from "./activity-events";
 export * from "./usage-metrics";
+export * from "./account-applications";
 export * from "./relations";
