@@ -7,6 +7,7 @@ import { subscriptions } from "./subscriptions";
 import { knowledgeDocuments } from "./knowledge-documents";
 import { activityEvents } from "./activity-events";
 import { usageMetrics } from "./usage-metrics";
+import { accountApplications } from "./account-applications";
 
 export const organizationsRelations = relations(organizations, ({ many, one }) => ({
   users: many(users),
@@ -25,6 +26,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   uploadedKnowledgeDocuments: many(knowledgeDocuments),
   activityEvents: many(activityEvents),
+  reviewedAccountApplications: many(accountApplications),
 }));
 
 export const departmentsRelations = relations(departments, ({ one, many }) => ({
@@ -92,3 +94,13 @@ export const usageMetricsRelations = relations(usageMetrics, ({ one }) => ({
     references: [organizations.id],
   }),
 }));
+
+export const accountApplicationsRelations = relations(
+  accountApplications,
+  ({ one }) => ({
+    reviewedBy: one(users, {
+      fields: [accountApplications.reviewedByUserId],
+      references: [users.id],
+    }),
+  }),
+);
