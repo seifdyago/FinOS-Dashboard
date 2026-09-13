@@ -8,4 +8,5 @@ export * from "./platform-admins";
 export * from "./activity-events";
 export * from "./usage-metrics";
 export * from "./account-applications";
+export * from "./auth-sessions";
 export * from "./relations";
