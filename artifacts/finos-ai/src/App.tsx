@@ -18,7 +18,7 @@ import NotFound from '@/pages/not-found';
 import { PlatformProvider, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
 import { employees } from '@/data/employees';
 import type { Employee } from '@/types/employee';
-import { createCompanyOnboarding, recordActivityEvent, useGetPlatformAnalytics, type RecordActivityEventRequest } from '@workspace/api-client-react';
+import { recordActivityEvent, useGetPlatformAnalytics, type RecordActivityEventRequest } from '@workspace/api-client-react';
 import {
   deleteKnowledgeFile,
   finalizeKnowledgeFile,
@@ -32,6 +32,7 @@ const queryClient = new QueryClient();
 
 const PLATFORM_OWNER_EMAIL = 'seifdyago@gmail.com';
 const ACTIVE_ACCOUNT_KEY = 'finos-active-account-v2';
+const MERCHANT_CREDENTIALS_KEY = 'finos-merchant-credential-verifiers-v1';
 
 type BackendSessionUser = {
   id: string;
@@ -55,64 +56,45 @@ function isPlatformOwner(email: string): boolean {
   return normalizeEmail(email) === PLATFORM_OWNER_EMAIL;
 }
 
-async function fetchBackendSession(): Promise<BackendSessionResponse> {
-  const response = await fetch('/api/auth/session', {
-    method: 'GET',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    return { authenticated: false };
-  }
-
-  return response.json() as Promise<BackendSessionResponse>;
-}
-
-
-
-type StoredAuthAccount = {
-  email: string;
-  passwordHash: string;
-  name: string;
-  role: string;
-  accountType: 'platform_admin' | 'company' | 'individual';
-  subscription: 'basic' | 'premium' | 'free';
-  tenantId: string;
-  tenantName: string;
-  idDocument?: { name: string; type: string; size: number };
-  phone?: string;
-  createdAt: string;
-};
-
-function normalizeEmail(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-async function hashPassword(value: string): Promise<string> {
+async function hashCredential(value: string): Promise<string> {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+async function fetchBackendSession(): Promise<BackendSessionResponse> {
+  const response = await fetch('/api/auth/session', {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
 
+  if (!response.ok) return { authenticated: false };
+  return response.json() as Promise<BackendSessionResponse>;
+}
 
-function accountTenant(account: StoredAuthAccount): { id: string; name: string; domain: string; initials: string } {
-  const initials = account.tenantName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+function tenantForBackendUser(user: BackendSessionUser) {
+  const domain = user.email.split('@')[1] || 'workspace';
+  const base = domain.split('.')[0] || 'workspace';
+  const name = base
+    .split(/[-_.]/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(' ') || 'Workspace';
+  const initials = name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
   return {
-    id: account.tenantId,
-    name: account.tenantName,
-    domain: account.email.split('@')[1] || 'local',
+    id: user.organization_id,
+    name,
+    domain,
     initials: initials || 'FN',
   };
 }
-
-function isPlatformOwner(email: string): boolean {
-  return normalizeEmail(email) === PLATFORM_OWNER_EMAIL;
-}
-
 
 type Icon = typeof Activity;
 
@@ -1108,7 +1090,7 @@ function DataForm({ kind, onClose }: { kind: 'transactions' | 'customers' | 'mer
     } else {
       if (!values.name || !values.segment) { toast.error('Add a merchant name and segment'); return; }
       if (merchantPassword.length < 8) { toast.error('Merchant password must be at least 8 characters'); return; }
-      void hashPassword(merchantPassword).then((passwordHash) => {
+      void hashCredential(merchantPassword).then((passwordHash) => {
         try {
           const raw = localStorage.getItem(MERCHANT_CREDENTIALS_KEY);
           const credentials = raw ? JSON.parse(raw) as Record<string, { passwordHash: string; idDocument?: { name: string; type: string; size: number } }> : {};
@@ -1266,17 +1248,17 @@ function Login({ onLogin }: { onLogin: () => void }) {
   const [idDocument, setIdDocument] = useState<File | null>(null);
   const [error, setError] = useState('');
 
-  const finishLogin = (account: StoredAuthAccount) => {
-    const tenant = accountTenant(account);
+  const finishLogin = (user: BackendSessionUser) => {
+    const tenant = tenantForBackendUser(user);
     localStorage.setItem('finos-active-tenant', JSON.stringify(tenant));
-    localStorage.setItem(ACTIVE_ACCOUNT_KEY, JSON.stringify(account));
-    const initials = account.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+    localStorage.setItem(ACTIVE_ACCOUNT_KEY, JSON.stringify(user));
+    const initials = user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
     localStorage.setItem(`finos:${tenant.id}:user`, JSON.stringify({
-      name: account.name,
-      email: account.email,
-      role: account.role,
+      name: user.name,
+      email: user.email,
+      role: user.role,
       initials,
-      title: account.role,
+      title: user.role,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     }));
     onLogin();
@@ -1292,21 +1274,42 @@ function Login({ onLogin }: { onLogin: () => void }) {
       toast.error('Enter your password');
       return;
     }
+
     setLoading(true);
+    setError('');
     try {
-      const passwordHash = await hashPassword(password);
-      const account = getStoredAccounts().find((candidate) => normalizeEmail(candidate.email) === normalizedEmail && candidate.passwordHash === passwordHash);
-      if (!account) {
-        setError('Email or password is incorrect. Use an account created from this registration flow.');
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ email: normalizedEmail, password }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(typeof payload?.error === 'string' ? payload.error : 'Email or password is incorrect.');
         return;
       }
-      finishLogin(account);
-      if (!isPlatformOwner(account.email)) {
-        reportWorkspaceActivity(account.tenantId, account.email, { event_type: 'login', metadata: { method: 'email_password', accountType: account.accountType } });
+
+      const user = payload?.user as BackendSessionUser | undefined;
+      if (!user?.id || !user.organization_id || !user.email) {
+        setError('The server returned an invalid session. Please try again.');
+        return;
       }
-      toast.success(`Welcome to ${account.name}`);
+
+      finishLogin(user);
+      if (!isPlatformOwner(user.email)) {
+        reportWorkspaceActivity(user.organization_id, user.email, {
+          event_type: 'login',
+          metadata: { method: 'email_password' },
+        });
+      }
+      toast.success(`Welcome to ${user.name}`);
     } catch {
-      setError('Unable to verify the account. Please try again.');
+      setError('Unable to reach the authentication server. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -1342,148 +1345,58 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setError('An ID/document attachment is required for every new account.');
       return;
     }
+    if (accountType !== 'company') {
+      setError('Individual account verification is not enabled yet. Please use company onboarding.');
+      return;
+    }
+
     setLoading(true);
     try {
       const normalizedEmail = normalizeEmail(email);
-      const passwordHash = await hashPassword(password);
-      const existing = getStoredAccounts();
-      if (existing.some((candidate) => normalizeEmail(candidate.email) === normalizedEmail)) {
-        setError('An account with this email already exists.');
+      const response = await fetch('/api/onboarding/companies', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          name: companyName.trim(),
+          email: normalizedEmail,
+          password,
+          industry,
+          company_size: companySize,
+          subscription,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(typeof payload?.error === 'string' ? payload.error : 'Unable to submit the company for security review.');
         return;
       }
 
-      let tenantId = `local-${accountType}-${Date.now()}`;
-      let tenantName = accountType === 'company' ? companyName.trim() : `${fullName.trim()} workspace`;
-      let role = accountType === 'company' ? 'Workspace admin' : 'Individual merchant';
-
-      if (accountType === 'company') {
-        try {
-          const result = await createCompanyOnboarding({
-            name: companyName.trim(),
-            email: normalizedEmail,
-            industry,
-            company_size: companySize,
-          });
-          tenantId = result.organization.id;
-          tenantName = result.organization.name;
-          role = result.user.role;
-        } catch {
-          // The UI still creates a local account if the optional onboarding API is unavailable.
-        }
-      }
-
-      const account: StoredAuthAccount = {
-        email: normalizedEmail,
-        passwordHash,
-        name: fullName.trim(),
-        role,
-        accountType,
-        subscription: accountType === 'company' ? subscription : 'basic',
-        tenantId,
-        tenantName,
-        idDocument: { name: idDocument.name, type: idDocument.type, size: idDocument.size },
-        phone: phone.trim(),
-        createdAt: new Date().toISOString(),
-      };
-      saveStoredAccounts([...existing, account]);
-      finishLogin(account);
-      toast.success(`${accountType === 'company' ? 'Company' : 'Individual'} account created`);
+      setOnboarding(false);
+      setStep(1);
+      setPassword('');
+      setConfirmPassword('');
+      setIdDocument(null);
+      setError('');
+      toast.success('Company submitted. Security review is required before sign-in.');
     } catch {
-      setError('Account creation failed. Check the fields and try again.');
+      setError('Unable to reach the onboarding server. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const requestPasswordReset = () => {
-    setError('');
-    const account = getStoredAccounts().find((candidate) => normalizeEmail(candidate.email) === normalizeEmail(resetEmail));
-    if (!account || !account.phone || account.phone.replace(/\D/g, '') !== resetPhone.replace(/\D/g, '') || !account.idDocument || account.idDocument.name !== resetIdName.trim()) {
-      setError('The email, phone number, and ID/document details do not match a registered account.');
-      return;
-    }
-    localStorage.setItem(PASSWORD_RESET_KEY, JSON.stringify({ email: account.email, otp: TEST_OTP, createdAt: Date.now() }));
-    setResetStep(2);
-    toast.success(`Test verification code: ${TEST_OTP}`);
+    setError('Secure password reset is not enabled yet. Please contact your FinOS security administrator.');
   };
 
   const completePasswordReset = async () => {
-    const stored = localStorage.getItem(PASSWORD_RESET_KEY);
-    let reset: { email: string; otp: string; createdAt: number } | null = null;
-    try { reset = stored ? JSON.parse(stored) as { email: string; otp: string; createdAt: number } : null; } catch { reset = null; }
-    if (!reset || Date.now() - reset.createdAt > 10 * 60 * 1000 || resetOtp !== reset.otp || resetNewPassword.length < 8) {
-      setError('Enter the valid verification code and a new password of at least 8 characters.');
-      return;
-    }
-    const passwordHash = await hashPassword(resetNewPassword);
-    const accounts = getStoredAccounts().map((account) => normalizeEmail(account.email) === normalizeEmail(reset!.email) ? { ...account, passwordHash } : account);
-    saveStoredAccounts(accounts);
-    localStorage.removeItem(PASSWORD_RESET_KEY);
-    setForgotOpen(false);
-    setResetStep(1);
-    setResetOtp('');
-    setResetNewPassword('');
-    setError('');
-    toast.success('Password reset successfully. You can sign in now.');
+    setError('Secure password reset is not enabled yet. Please contact your FinOS security administrator.');
   };
-
-  const fieldClass = 'input-dark h-11 w-full rounded-lg px-3 text-sm';
-  const onboardingPanel = (
-    <>
-      <div className="mb-7 flex items-center justify-between">
-        <div><div className="kicker mb-2">Public account registration</div><h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">{accountType === 'company' ? 'Create a company account.' : 'Create an individual account.'}</h2></div>
-        <button onClick={() => { setOnboarding(false); setStep(1); setError(''); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid="button-back-to-login">Back</button>
-      </div>
-      <div className="mb-7 grid grid-cols-3 gap-2">
-        {['Identity & password', accountType === 'company' ? 'Company & subscription' : 'ID verification', 'Review'].map((label, index) => <div key={label} className={`border-t-2 pt-2 text-[10px] ${step >= index + 1 ? 'border-[#8b5cf6] text-[#c8e4e9]' : 'border-[#214057] text-[#607b90]'}`}>{index + 1}. {label}</div>)}
-      </div>
-      {step === 1 && <div className="space-y-4">
-        <label className="block"><span className="kicker mb-2 block">Full name</span><input autoFocus value={fullName} onChange={(event) => setFullName(event.target.value)} className={fieldClass} placeholder="Your full name" data-testid="input-signup-name"/></label>
-        <label className="block"><span className="kicker mb-2 block">Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className={fieldClass} placeholder="you@company.com" data-testid="input-signup-email"/></label>
-        <label className="block"><span className="kicker mb-2 block">Password</span><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" className={fieldClass} placeholder="At least 8 characters" data-testid="input-signup-password"/></label>
-        <label className="block"><span className="kicker mb-2 block">Confirm password</span><input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" className={fieldClass} placeholder="Repeat your password" data-testid="input-signup-confirm-password"/></label>
-        <label className="block"><span className="kicker mb-2 block">Phone number</span><input value={phone} onChange={(event) => setPhone(event.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000" data-testid="input-signup-phone"/></label>
-        <div className="grid gap-2 sm:grid-cols-2"><button onClick={() => setAccountType('company')} className={`rounded-lg border px-3 py-3 text-left text-[11px] ${accountType === 'company' ? 'border-[#8b5cf6] bg-[#21183f] text-white' : 'border-[#24465c] text-[#7892a5]'}`}><b>Company</b><span className="mt-1 block">Subscription workspace</span></button><button onClick={() => setAccountType('individual')} className={`rounded-lg border px-3 py-3 text-left text-[11px] ${accountType === 'individual' ? 'border-[#8b5cf6] bg-[#21183f] text-white' : 'border-[#24465c] text-[#7892a5]'}`}><b>Individual</b><span className="mt-1 block">Merchant / small business</span></button></div>
-      </div>}
-      {step === 2 && accountType === 'company' && <div className="space-y-4">
-        <label><span className="kicker mb-2 block">Company name</span><input autoFocus value={companyName} onChange={(event) => setCompanyName(event.target.value)} className={fieldClass} placeholder="Company name" data-testid="input-onboarding-company-name"/></label>
-        <label><span className="kicker mb-2 block">Industry</span><select value={industry} onChange={(event) => setIndustry(event.target.value)} className={fieldClass} data-testid="select-onboarding-industry"><option value="">Select an industry</option><option>Financial services</option><option>Payments</option><option>Commerce</option><option>Technology</option><option>Professional services</option><option>Other</option></select></label>
-        <label><span className="kicker mb-2 block">Company size</span><select value={companySize} onChange={(event) => setCompanySize(event.target.value)} className={fieldClass} data-testid="select-onboarding-company-size"><option value="">Select company size</option><option>1–10</option><option>11–50</option><option>51–200</option><option>201–500</option><option>501–1,000</option><option>1,000+</option></select></label>
-        <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'basic' | 'premium')} className={fieldClass} data-testid="select-onboarding-subscription"><option value="basic">Basic subscription</option><option value="premium">Premium subscription</option></select></label>
-        <label><span className="kicker mb-2 block">ID / company document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-onboarding-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name}</span>}</label>
-      </div>}
-      {step === 2 && accountType === 'individual' && <div className="space-y-4">
-        <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4 text-[11px] leading-5 text-[#8aa1b0]">Individual merchant accounts are for people with small jobs/businesses. A subscription is required before the workspace becomes active.</div>
-        <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'basic' | 'premium')} className={fieldClass}><option value="basic">Basic subscription</option><option value="premium">Premium subscription</option></select></label>
-        <label><span className="kicker mb-2 block">ID card / identity document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-individual-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name} • ready to attach</span>}</label>
-      </div>}
-      {step === 3 && <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Phone</span><span className="text-right text-[#e2e8f0]">{phone}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">Password is stored only as a SHA-256 verifier in this frontend demo. Production authentication and document storage must be handled by the server.</div></div></div>}
-      {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
-      <button onClick={step === 3 ? createAccount : nextOnboardingStep} disabled={loading} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm">{loading ? <RefreshCw size={15} className="animate-spin"/> : step === 3 ? <UserPlus size={15}/> : <ArrowUpRight size={15}/>} {loading ? 'Creating account...' : step === 3 ? 'Create account' : 'Continue'}</button>
-      {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]">Previous step</button>}
-    </>
-  );
-
-  if (forgotOpen) {
-    return <div className="noise flex min-h-[100dvh] items-center justify-center bg-[#07111f] px-5">
-      <div className="w-full max-w-[430px] rounded-2xl border border-[#29465d] bg-[#0d1020] p-6 shadow-2xl">
-        <div className="mb-6 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#26194d] text-[#a78bfa]"><KeyRound size={18}/></div><div><div className="kicker">Account recovery</div><h2 className="display-font text-[25px] font-semibold text-white">Reset your password.</h2></div></div>
-        {resetStep === 1 ? <div className="space-y-4">
-          <label className="block"><span className="kicker mb-2 block">Email</span><input value={resetEmail} onChange={e=>setResetEmail(e.target.value)} type="email" className={fieldClass} placeholder="you@company.com"/></label>
-          <label className="block"><span className="kicker mb-2 block">Registered phone</span><input value={resetPhone} onChange={e=>setResetPhone(e.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000"/></label>
-          <label className="block"><span className="kicker mb-2 block">ID/document filename</span><input value={resetIdName} onChange={e=>setResetIdName(e.target.value)} className={fieldClass} placeholder="The document used at registration"/></label>
-          <p className="text-[10px] leading-5 text-[#71899d]">Test mode: a verification code is generated locally. Production SMS/identity verification must be handled by the backend.</p>
-          <button onClick={requestPasswordReset} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm"><Phone size={15}/> Verify account</button>
-        </div> : <div className="space-y-4">
-          <label className="block"><span className="kicker mb-2 block">Verification code</span><input value={resetOtp} onChange={e=>setResetOtp(e.target.value)} inputMode="numeric" className={fieldClass} placeholder="123456"/></label>
-          <label className="block"><span className="kicker mb-2 block">New password</span><input value={resetNewPassword} onChange={e=>setResetNewPassword(e.target.value)} type="password" className={fieldClass} placeholder="At least 8 characters"/></label>
-          <button onClick={() => void completePasswordReset()} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm"><KeyRound size={15}/> Reset password</button>
-        </div>}
-        {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
-        <button onClick={()=>{setForgotOpen(false);setError('')}} className="btn-quiet mt-3 h-10 w-full rounded-lg text-[11px]">Back to sign in</button>
-      </div>
-    </div>;
-  }
 
   return (
     <div className="noise flex min-h-[100dvh] bg-[#07111f]">
@@ -1815,37 +1728,82 @@ function AppRouter({onLogout}:{onLogout:()=>void}) {
 }
 
 function Root() {
-  const sessionValid = () => {
-    const hasSession = localStorage.getItem('finos-auth') === '1';
-    const at = Number(localStorage.getItem('finos-auth-at') || 0);
-    const activeAccount = localStorage.getItem(ACTIVE_ACCOUNT_KEY);
-    return hasSession && Boolean(activeAccount) && Date.now() - at < 8 * 60 * 60 * 1000;
-  };
-  const [authed, setAuthed] = useState(sessionValid);
+  const [authed, setAuthed] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!authed && location !== '/login') setLocation('/login');
-  }, [authed, location, setLocation]);
+    let mounted = true;
+
+    void fetchBackendSession()
+      .then((session) => {
+        if (!mounted) return;
+        if (session.authenticated && session.user) {
+          const tenant = tenantForBackendUser(session.user);
+          localStorage.setItem('finos-active-tenant', JSON.stringify(tenant));
+          localStorage.setItem(ACTIVE_ACCOUNT_KEY, JSON.stringify(session.user));
+          localStorage.setItem(`finos:${tenant.id}:user`, JSON.stringify({
+            name: session.user.name,
+            email: session.user.email,
+            role: session.user.role,
+            initials: session.user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+            title: session.user.role,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          }));
+          setAuthed(true);
+        } else {
+          localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+          setAuthed(false);
+        }
+      })
+      .catch(() => {
+        if (mounted) setAuthed(false);
+      })
+      .finally(() => {
+        if (mounted) setCheckingSession(false);
+      });
+
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!checkingSession && !authed && location !== '/login') setLocation('/login');
+  }, [authed, checkingSession, location, setLocation]);
 
   useEffect(() => {
     if (!authed) return;
     const interval = window.setInterval(() => {
-      if (!sessionValid()) {
-        localStorage.removeItem('finos-auth');
-        localStorage.removeItem('finos-auth-at');
+      void fetchBackendSession().then((session) => {
+        if (session.authenticated && session.user) return;
         localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
         setAuthed(false);
         setLocation('/login');
         toast.info('Your session expired. Please sign in again.');
-      }
+      });
     }, 60_000);
     return () => window.clearInterval(interval);
   }, [authed, setLocation]);
 
-  if (!authed) return <Route path="/login"><Login onLogin={() => { setAuthed(true); setLocation('/'); }}/></Route>;
+  if (checkingSession) {
+    return <div className="grid min-h-screen place-items-center bg-[#070914] text-sm text-[#9fb4c0]">Checking secure session...</div>;
+  }
 
-  return <PlatformProvider><EmployeesProvider><AppRouter onLogout={() => { localStorage.removeItem('finos-auth'); localStorage.removeItem('finos-auth-at'); localStorage.removeItem(ACTIVE_ACCOUNT_KEY); setAuthed(false); setLocation('/login'); }}/></EmployeesProvider></PlatformProvider>;
+  if (!authed) {
+    return <Route path="/login"><Login onLogin={() => { setAuthed(true); setLocation('/'); }} /></Route>;
+  }
+
+  return <PlatformProvider><EmployeesProvider><AppRouter onLogout={() => {
+    void fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    }).finally(() => {
+      localStorage.removeItem('finos-active-tenant');
+      localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+      setAuthed(false);
+      setLocation('/login');
+    });
+  }} /></EmployeesProvider></PlatformProvider>;
 }
 
 function FinOSVisualTheme() {
