@@ -68,7 +68,6 @@ async function fetchBackendSession(): Promise<BackendSessionResponse> {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-
   if (!response.ok) return { authenticated: false };
   return response.json() as Promise<BackendSessionResponse>;
 }
@@ -76,24 +75,9 @@ async function fetchBackendSession(): Promise<BackendSessionResponse> {
 function tenantForBackendUser(user: BackendSessionUser) {
   const domain = user.email.split('@')[1] || 'workspace';
   const base = domain.split('.')[0] || 'workspace';
-  const name = base
-    .split(/[-_.]/)
-    .filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join(' ') || 'Workspace';
-  const initials = name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
-  return {
-    id: user.organization_id,
-    name,
-    domain,
-    initials: initials || 'FN',
-  };
+  const name = base.split(/[-_.]/).filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join(' ') || 'Workspace';
+  const initials = name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+  return { id: user.organization_id, name, domain, initials: initials || 'FN' };
 }
 
 type Icon = typeof Activity;
@@ -1274,32 +1258,25 @@ function Login({ onLogin }: { onLogin: () => void }) {
       toast.error('Enter your password');
       return;
     }
-
     setLoading(true);
     setError('');
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ email: normalizedEmail, password }),
       });
       const payload = await response.json().catch(() => ({}));
-
       if (!response.ok) {
         setError(typeof payload?.error === 'string' ? payload.error : 'Email or password is incorrect.');
         return;
       }
-
       const user = payload?.user as BackendSessionUser | undefined;
       if (!user?.id || !user.organization_id || !user.email) {
         setError('The server returned an invalid session. Please try again.');
         return;
       }
-
       finishLogin(user);
       if (!isPlatformOwner(user.email)) {
         reportWorkspaceActivity(user.organization_id, user.email, {
@@ -1349,17 +1326,13 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setError('Individual account verification is not enabled yet. Please use company onboarding.');
       return;
     }
-
     setLoading(true);
     try {
       const normalizedEmail = normalizeEmail(email);
       const response = await fetch('/api/onboarding/companies', {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           name: companyName.trim(),
           email: normalizedEmail,
@@ -1370,12 +1343,10 @@ function Login({ onLogin }: { onLogin: () => void }) {
         }),
       });
       const payload = await response.json().catch(() => ({}));
-
       if (!response.ok) {
         setError(typeof payload?.error === 'string' ? payload.error : 'Unable to submit the company for security review.');
         return;
       }
-
       setOnboarding(false);
       setStep(1);
       setPassword('');
@@ -1396,7 +1367,63 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
   const completePasswordReset = async () => {
     setError('Secure password reset is not enabled yet. Please contact your FinOS security administrator.');
-  };
+  };  const fieldClass = 'input-dark h-11 w-full rounded-lg px-3 text-sm';
+  const onboardingPanel = (
+    <>
+      <div className="mb-7 flex items-center justify-between">
+        <div><div className="kicker mb-2">Public account registration</div><h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">{accountType === 'company' ? 'Create a company account.' : 'Create an individual account.'}</h2></div>
+        <button onClick={() => { setOnboarding(false); setStep(1); setError(''); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid="button-back-to-login">Back</button>
+      </div>
+      <div className="mb-7 grid grid-cols-3 gap-2">
+        {['Identity & password', accountType === 'company' ? 'Company & subscription' : 'ID verification', 'Review'].map((label, index) => <div key={label} className={`border-t-2 pt-2 text-[10px] ${step >= index + 1 ? 'border-[#8b5cf6] text-[#c8e4e9]' : 'border-[#214057] text-[#607b90]'}`}>{index + 1}. {label}</div>)}
+      </div>
+      {step === 1 && <div className="space-y-4">
+        <label className="block"><span className="kicker mb-2 block">Full name</span><input autoFocus value={fullName} onChange={(event) => setFullName(event.target.value)} className={fieldClass} placeholder="Your full name" data-testid="input-signup-name"/></label>
+        <label className="block"><span className="kicker mb-2 block">Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className={fieldClass} placeholder="you@company.com" data-testid="input-signup-email"/></label>
+        <label className="block"><span className="kicker mb-2 block">Password</span><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" className={fieldClass} placeholder="At least 8 characters" data-testid="input-signup-password"/></label>
+        <label className="block"><span className="kicker mb-2 block">Confirm password</span><input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" className={fieldClass} placeholder="Repeat your password" data-testid="input-signup-confirm-password"/></label>
+        <label className="block"><span className="kicker mb-2 block">Phone number</span><input value={phone} onChange={(event) => setPhone(event.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000" data-testid="input-signup-phone"/></label>
+        <div className="grid gap-2 sm:grid-cols-2"><button onClick={() => setAccountType('company')} className={`rounded-lg border px-3 py-3 text-left text-[11px] ${accountType === 'company' ? 'border-[#8b5cf6] bg-[#21183f] text-white' : 'border-[#24465c] text-[#7892a5]'}`}><b>Company</b><span className="mt-1 block">Subscription workspace</span></button><button onClick={() => setAccountType('individual')} className={`rounded-lg border px-3 py-3 text-left text-[11px] ${accountType === 'individual' ? 'border-[#8b5cf6] bg-[#21183f] text-white' : 'border-[#24465c] text-[#7892a5]'}`}><b>Individual</b><span className="mt-1 block">Merchant / small business</span></button></div>
+      </div>}
+      {step === 2 && accountType === 'company' && <div className="space-y-4">
+        <label><span className="kicker mb-2 block">Company name</span><input autoFocus value={companyName} onChange={(event) => setCompanyName(event.target.value)} className={fieldClass} placeholder="Company name" data-testid="input-onboarding-company-name"/></label>
+        <label><span className="kicker mb-2 block">Industry</span><select value={industry} onChange={(event) => setIndustry(event.target.value)} className={fieldClass} data-testid="select-onboarding-industry"><option value="">Select an industry</option><option>Financial services</option><option>Payments</option><option>Commerce</option><option>Technology</option><option>Professional services</option><option>Other</option></select></label>
+        <label><span className="kicker mb-2 block">Company size</span><select value={companySize} onChange={(event) => setCompanySize(event.target.value)} className={fieldClass} data-testid="select-onboarding-company-size"><option value="">Select company size</option><option>1–10</option><option>11–50</option><option>51–200</option><option>201–500</option><option>501–1,000</option><option>1,000+</option></select></label>
+        <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'basic' | 'premium')} className={fieldClass} data-testid="select-onboarding-subscription"><option value="basic">Basic subscription</option><option value="premium">Premium subscription</option></select></label>
+        <label><span className="kicker mb-2 block">ID / company document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-onboarding-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name}</span>}</label>
+      </div>}
+      {step === 2 && accountType === 'individual' && <div className="space-y-4">
+        <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4 text-[11px] leading-5 text-[#8aa1b0]">Individual merchant accounts are for people with small jobs/businesses. A subscription is required before the workspace becomes active.</div>
+        <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'basic' | 'premium')} className={fieldClass}><option value="basic">Basic subscription</option><option value="premium">Premium subscription</option></select></label>
+        <label><span className="kicker mb-2 block">ID card / identity document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-individual-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name} • ready to attach</span>}</label>
+      </div>}
+      {step === 3 && <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Phone</span><span className="text-right text-[#e2e8f0]">{phone}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">Password is stored only as a SHA-256 verifier in this frontend demo. Production authentication and document storage must be handled by the server.</div></div></div>}
+      {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
+      <button onClick={step === 3 ? createAccount : nextOnboardingStep} disabled={loading} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm">{loading ? <RefreshCw size={15} className="animate-spin"/> : step === 3 ? <UserPlus size={15}/> : <ArrowUpRight size={15}/>} {loading ? 'Creating account...' : step === 3 ? 'Create account' : 'Continue'}</button>
+      {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]">Previous step</button>}
+    </>
+  );
+
+  if (forgotOpen) {
+    return <div className="noise flex min-h-[100dvh] items-center justify-center bg-[#07111f] px-5">
+      <div className="w-full max-w-[430px] rounded-2xl border border-[#29465d] bg-[#0d1020] p-6 shadow-2xl">
+        <div className="mb-6 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#26194d] text-[#a78bfa]"><KeyRound size={18}/></div><div><div className="kicker">Account recovery</div><h2 className="display-font text-[25px] font-semibold text-white">Reset your password.</h2></div></div>
+        {resetStep === 1 ? <div className="space-y-4">
+          <label className="block"><span className="kicker mb-2 block">Email</span><input value={resetEmail} onChange={e=>setResetEmail(e.target.value)} type="email" className={fieldClass} placeholder="you@company.com"/></label>
+          <label className="block"><span className="kicker mb-2 block">Registered phone</span><input value={resetPhone} onChange={e=>setResetPhone(e.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000"/></label>
+          <label className="block"><span className="kicker mb-2 block">ID/document filename</span><input value={resetIdName} onChange={e=>setResetIdName(e.target.value)} className={fieldClass} placeholder="The document used at registration"/></label>
+          <p className="text-[10px] leading-5 text-[#71899d]">Test mode: a verification code is generated locally. Production SMS/identity verification must be handled by the backend.</p>
+          <button onClick={requestPasswordReset} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm"><Phone size={15}/> Verify account</button>
+        </div> : <div className="space-y-4">
+          <label className="block"><span className="kicker mb-2 block">Verification code</span><input value={resetOtp} onChange={e=>setResetOtp(e.target.value)} inputMode="numeric" className={fieldClass} placeholder="123456"/></label>
+          <label className="block"><span className="kicker mb-2 block">New password</span><input value={resetNewPassword} onChange={e=>setResetNewPassword(e.target.value)} type="password" className={fieldClass} placeholder="At least 8 characters"/></label>
+          <button onClick={() => void completePasswordReset()} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm"><KeyRound size={15}/> Reset password</button>
+        </div>}
+        {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
+        <button onClick={()=>{setForgotOpen(false);setError('')}} className="btn-quiet mt-3 h-10 w-full rounded-lg text-[11px]">Back to sign in</button>
+      </div>
+    </div>;
+  }
 
   return (
     <div className="noise flex min-h-[100dvh] bg-[#07111f]">
@@ -1734,7 +1761,6 @@ function Root() {
 
   useEffect(() => {
     let mounted = true;
-
     void fetchBackendSession()
       .then((session) => {
         if (!mounted) return;
@@ -1762,7 +1788,6 @@ function Root() {
       .finally(() => {
         if (mounted) setCheckingSession(false);
       });
-
     return () => { mounted = false; };
   }, []);
 
