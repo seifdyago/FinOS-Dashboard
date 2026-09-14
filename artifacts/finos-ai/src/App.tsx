@@ -31,90 +31,45 @@ import {
 const queryClient = new QueryClient();
 
 const PLATFORM_OWNER_EMAIL = 'seifdyago@gmail.com';
-const PLATFORM_OWNER_PASSWORD_HASH = 'f5c300c99642e85eb995fda3f0bf88cf9002b16656344619ae4dba167750cc7e';
-const AUTH_ACCOUNTS_KEY = 'finos-auth-accounts-v2';
 const ACTIVE_ACCOUNT_KEY = 'finos-active-account-v2';
-const PASSWORD_RESET_KEY = 'finos-password-reset-v1';
-const TEST_OTP = '123456';
-const MERCHANT_CREDENTIALS_KEY = 'finos-merchant-credential-verifiers-v1';
 
-type StoredAuthAccount = {
+type BackendSessionUser = {
+  id: string;
+  organization_id: string;
   email: string;
-  passwordHash: string;
   name: string;
   role: string;
-  accountType: 'platform_admin' | 'company' | 'individual';
-  subscription: 'basic' | 'premium' | 'free';
-  tenantId: string;
-  tenantName: string;
-  idDocument?: { name: string; type: string; size: number };
-  phone?: string;
-  createdAt: string;
+  status: string;
+};
+
+type BackendSessionResponse = {
+  authenticated: boolean;
+  user?: BackendSessionUser;
 };
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-async function hashPassword(value: string): Promise<string> {
-  const data = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function getStoredAccounts(): StoredAuthAccount[] {
-  try {
-    const raw = localStorage.getItem(AUTH_ACCOUNTS_KEY);
-    const parsed = raw ? JSON.parse(raw) as StoredAuthAccount[] : [];
-    const accounts = Array.isArray(parsed) ? parsed : [];
-    if (!accounts.some((account) => normalizeEmail(account.email) === PLATFORM_OWNER_EMAIL)) {
-      accounts.unshift({
-        email: PLATFORM_OWNER_EMAIL,
-        passwordHash: PLATFORM_OWNER_PASSWORD_HASH,
-        name: 'Seifdyago',
-        role: 'Platform owner',
-        accountType: 'platform_admin',
-        subscription: 'premium',
-        tenantId: 'orbit-digital',
-        tenantName: 'FinOS Platform',
-        createdAt: new Date().toISOString(),
-      });
-      localStorage.setItem(AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
-    }
-    return accounts;
-  } catch {
-    return [{
-      email: PLATFORM_OWNER_EMAIL,
-      passwordHash: PLATFORM_OWNER_PASSWORD_HASH,
-      name: 'Seifdyago',
-      role: 'Platform owner',
-      accountType: 'platform_admin',
-      subscription: 'premium',
-      tenantId: 'orbit-digital',
-      tenantName: 'FinOS Platform',
-      createdAt: new Date().toISOString(),
-    }];
-  }
-}
-
-function saveStoredAccounts(accounts: StoredAuthAccount[]): void {
-  localStorage.setItem(AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
-}
-
-function accountTenant(account: StoredAuthAccount): { id: string; name: string; domain: string; initials: string } {
-  const initials = account.tenantName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-  return {
-    id: account.tenantId,
-    name: account.tenantName,
-    domain: account.email.split('@')[1] || 'local',
-    initials: initials || 'FN',
-  };
-}
-
 function isPlatformOwner(email: string): boolean {
   return normalizeEmail(email) === PLATFORM_OWNER_EMAIL;
 }
 
+async function fetchBackendSession(): Promise<BackendSessionResponse> {
+  const response = await fetch('/api/auth/session', {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    return { authenticated: false };
+  }
+
+  return response.json() as Promise<BackendSessionResponse>;
+}
 
 type Icon = typeof Activity;
 
@@ -186,16 +141,9 @@ function isImageAttachment(attachment: ChatAttachment): boolean {
 
 
 function reportWorkspaceActivity(
-  organizationId: string,
-  userEmail: string,
   event: RecordActivityEventRequest,
 ): void {
-  void recordActivityEvent(event, {
-    headers: {
-      'x-finos-organization-id': organizationId,
-      'x-finos-user-email': userEmail,
-    },
-  }).catch(() => {
+  void recordActivityEvent(event).catch(() => {
     // Telemetry is additive and must not block customer workflows.
   });
 }
@@ -622,7 +570,7 @@ function EmployeeForm({ employee, onClose }: { employee?: Employee; onClose: () 
       if (employee) updateEmployee(employee.id, nextDraft);
       else {
         addEmployee(nextDraft);
-        reportWorkspaceActivity(tenant.id, user.email, {
+        reportWorkspaceActivity({
           event_type: 'employee_created',
           metadata: {
             employeeName: nextDraft.name,
