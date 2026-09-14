@@ -18,6 +18,7 @@ tags:
     description: Platform-owner analytics operations
   - name: activity
     description: Organization activity and usage tracking
+
 paths:
   /healthz:
     get:
@@ -32,12 +33,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
   /onboarding/companies:
     post:
       operationId: createCompanyOnboarding
       tags: [onboarding]
       summary: Create a company workspace
-      description: Creates an organization and its initial admin user.
+      description: Creates a pending organization and its initial admin user for security review.
       requestBody:
         required: true
         content:
@@ -46,7 +48,7 @@ paths:
               $ref: "#/components/schemas/CreateCompanyOnboardingRequest"
       responses:
         "201":
-          description: Company workspace created
+          description: Company workspace created and submitted for security review
           content:
             application/json:
               schema:
@@ -63,6 +65,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
   /knowledge/files/upload-url:
     post:
       operationId: requestKnowledgeFileUploadUrl
@@ -102,6 +105,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
   /knowledge/files:
     get:
       operationId: listKnowledgeFiles
@@ -129,6 +133,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
   /knowledge/files/finalize:
     post:
       operationId: finalizeKnowledgeFile
@@ -168,6 +173,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
   /knowledge/files/{fileId}/download-url:
     get:
       operationId: getKnowledgeFileDownloadUrl
@@ -206,6 +212,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
   /knowledge/files/{fileId}:
     delete:
       operationId: deleteKnowledgeFile
@@ -240,6 +247,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
   /platform-admin/analytics:
     get:
       operationId: getPlatformAnalytics
@@ -273,6 +281,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
   /activity/events:
     post:
       operationId: recordActivityEvent
@@ -309,6 +318,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
 components:
   parameters:
     FinOSOrganizationId:
@@ -318,12 +328,14 @@ components:
       schema:
         type: string
         minLength: 1
+
     FinOSUserEmail:
       name: x-finos-user-email
       in: header
       required: true
       schema:
         type: string
+
     FinOSPlatformAdminEmail:
       name: x-finos-platform-admin-email
       in: header
@@ -331,6 +343,7 @@ components:
       schema:
         type: string
         minLength: 1
+
   schemas:
     HealthStatus:
       type: object
@@ -339,26 +352,50 @@ components:
           type: string
       required:
         - status
+
     CreateCompanyOnboardingRequest:
       type: object
       properties:
         name:
           type: string
           minLength: 2
+          description: Company name
+
         email:
           type: string
+          format: email
           description: Work email address
+
+        password:
+          type: string
+          minLength: 8
+          description: Account password. The server stores only a secure password hash.
+
         industry:
           type: string
           minLength: 1
+          description: Company industry
+
         company_size:
           type: string
           minLength: 1
+          description: Company size
+
+        subscription:
+          type: string
+          enum:
+            - basic
+            - premium
+          description: Requested subscription plan
+
       required:
         - name
         - email
+        - password
         - industry
         - company_size
+        - subscription
+
     CompanyOnboardingResponse:
       type: object
       properties:
@@ -369,6 +406,7 @@ components:
       required:
         - organization
         - user
+
     OnboardedOrganization:
       type: object
       properties:
@@ -394,6 +432,7 @@ components:
         - industry
         - company_size
         - status
+
     OnboardedUser:
       type: object
       properties:
@@ -416,6 +455,7 @@ components:
         - name
         - role
         - status
+
     ApiError:
       type: object
       properties:
@@ -423,6 +463,7 @@ components:
           type: string
       required:
         - error
+
     KnowledgeFileUploadInput:
       type: object
       properties:
@@ -441,6 +482,7 @@ components:
         - original_file_name
         - mime_type
         - size_bytes
+
     KnowledgeFileFinalizeInput:
       type: object
       properties:
@@ -463,6 +505,7 @@ components:
         - mime_type
         - size_bytes
         - storage_key
+
     KnowledgeFileUploadUrlResponse:
       type: object
       properties:
@@ -473,6 +516,7 @@ components:
       required:
         - upload_url
         - storage_key
+
     KnowledgeFile:
       type: object
       properties:
@@ -513,10 +557,12 @@ components:
         - employee_id
         - employee_name
         - status
+
     KnowledgeFileListResponse:
       type: array
       items:
         $ref: "#/components/schemas/KnowledgeFile"
+
     KnowledgeFileDownloadUrlResponse:
       type: object
       properties:
@@ -524,6 +570,7 @@ components:
           type: string
       required:
         - download_url
+
     PlatformAnalytics:
       type: object
       properties:
@@ -541,6 +588,7 @@ components:
         - summary
         - companies
         - recent_activity
+
     PlatformAnalyticsSummary:
       type: object
       properties:
@@ -587,6 +635,7 @@ components:
         - total_ai_requests
         - total_responses
         - companies_registered_last_30_days
+
     PlatformCompanyAnalytics:
       type: object
       properties:
@@ -639,6 +688,7 @@ components:
         - ai_conversations
         - ai_requests
         - responses
+
     PlatformActivityEvent:
       type: object
       properties:
@@ -662,6 +712,7 @@ components:
         - event_type
         - metadata
         - created_at
+
     RecordActivityEventRequest:
       type: object
       properties:
@@ -678,4 +729,3 @@ components:
       required:
         - event_type
         - metadata
-
