@@ -10,6 +10,8 @@ import {
 import { CreateCompanyOnboardingBody } from "@workspace/api-zod";
 import { randomUUID } from "node:crypto";
 
+import { hashPassword } from "./password-auth";
+
 export class CompanyDomainAlreadyExistsError extends Error {
   constructor() {
     super("A company account already exists for this email domain.");
@@ -20,8 +22,10 @@ export class CompanyDomainAlreadyExistsError extends Error {
 export type CompanyOnboardingInput = {
   name: string;
   email: string;
+  password: string;
   industry: string;
   company_size: string;
+  subscription: "basic" | "premium";
 };
 
 export type CompanyOnboardingResult = {
@@ -60,7 +64,8 @@ function getInitials(name: string): string {
 }
 
 function getAdminName(email: string): string {
-  const localPart = normalizeEmail(email).split("@")[0] ?? "Admin";
+  const localPart =
+    normalizeEmail(email).split("@")[0] ?? "Admin";
 
   const name = localPart
     .split(/[._-]+/)
@@ -74,8 +79,21 @@ function getAdminName(email: string): string {
   return name || "Workspace Admin";
 }
 
+function getSubscriptionPriceCents(
+  plan: "basic" | "premium",
+): number {
+  return plan === "premium"
+    ? 200_000
+    : 100_000;
+}
+
 function isUniqueViolation(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
+  if (
+    typeof error !== "object" ||
+    error === null
+  ) {
+    return false;
+  }
 
   const candidate = error as {
     code?: unknown;
@@ -91,117 +109,56 @@ function isUniqueViolation(error: unknown): boolean {
 export async function createCompanyOnboarding(
   input: CompanyOnboardingInput,
 ): Promise<CompanyOnboardingResult> {
-  const parsed = CreateCompanyOnboardingBody.parse(input);
+  const parsed =
+    CreateCompanyOnboardingBody.parse(input);
 
   const name = parsed.name.trim();
   const email = normalizeEmail(parsed.email);
+  const password = parsed.password;
   const industry = parsed.industry.trim();
   const companySize = parsed.company_size.trim();
+  const subscription = parsed.subscription;
   const domain = getEmailDomain(email);
 
-  if (!name || !industry || !companySize) {
+  if (
+    !name ||
+    !industry ||
+    !companySize ||
+    !password
+  ) {
     throw new Error(
-      "Company name, industry, and company size are required.",
+      "Company name, email, password, industry, and company size are required.",
     );
   }
+
+  if (
+    subscription !== "basic" &&
+    subscription !== "premium"
+  ) {
+    throw new Error(
+      "Please select a valid subscription plan.",
+    );
+  }
+
+  /*
+   * Passwords are hashed before they ever reach the database.
+   * The plaintext password is never stored.
+   */
+  const {
+    hash: passwordHash,
+    salt: passwordSalt,
+  } = hashPassword(password);
+
+  const requestedPlan = subscription;
+  const priceCents =
+    getSubscriptionPriceCents(requestedPlan);
 
   try {
     return await db.transaction(async (transaction) => {
       /*
-       * The account application ID is also used as the organization ID.
-       * This gives us a stable internal reference between the application
-       * and the organization without exposing any sensitive document data.
-       */
-      const applicationId = randomUUID();
-
-      const [application] = await transaction
-        .insert(accountApplications)
-        .values({
-          id: applicationId,
-          applicantName: getAdminName(email),
-          applicantEmail: email,
-          companyName: name,
-          companyDomain: domain,
-          industry,
-          companySize,
-          requestedPlan: "basic",
-          verificationStatus: "pending_review",
-        })
-        .returning();
-
-      if (!application) {
-        throw new Error(
-          "Unable to create the security review application.",
-        );
-      }
-
-      /*
-       * The organization exists only as a pending workspace.
-       * It must NOT be treated as an active customer account until
-       * a security reviewer approves the application.
-       */
-      const [organization] = await transaction
-        .insert(organizations)
-        .values({
-          id: application.id,
-          name,
-          domain,
-          initials: getInitials(name),
-          industry,
-          companySize,
-          status: "pending_review",
-        })
-        .returning();
-
-      if (!organization) {
-        throw new Error(
-          "Unable to create the pending organization.",
-        );
-      }
-
-      /*
-       * The initial admin user is also pending.
-       * This prevents access before security approval.
-       */
-      const [user] = await transaction
-        .insert(users)
-        .values({
-          organizationId: organization.id,
-          email,
-          name: getAdminName(email),
-          title: "Company administrator",
-          role: "Workspace admin",
-          status: "pending_review",
-        })
-        .returning();
-
-      if (!user) {
-        throw new Error(
-          "Unable to create the pending workspace administrator.",
-        );
-      }
-
-      /*
-       * Keep a subscription record for the requested plan, but it is
-       * explicitly inactive until the security review is approved.
-       */
-      await transaction.insert(subscriptions).values({
-        organizationId: organization.id,
-        plan: "basic",
-        status: "pending_review",
-        priceCents: 100_000,
-      });
-
-      return {
-        organization,
-        user,
-      };
-    });
-  } catch (error) {
-    if (isUniqueViolation(error)) {
-      throw new CompanyDomainAlreadyExistsError();
-    }
-
-    throw error;
-  }
-}
+       * The account application ID is also used as the
+       * organization ID.
+       *
+       * The application is created as pending_review and
+       * must be approved by Security before the account
+       * can
