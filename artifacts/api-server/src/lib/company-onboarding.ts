@@ -38,7 +38,8 @@ function normalizeEmail(email: string): string {
 }
 
 function getEmailDomain(email: string): string {
-  const domain = normalizeEmail(email).split("@")[1] ?? "";
+  const domain =
+    normalizeEmail(email).split("@")[1] ?? "";
 
   if (
     !domain ||
@@ -72,7 +73,8 @@ function getAdminName(email: string): string {
     .filter(Boolean)
     .map(
       (part) =>
-        part[0].toUpperCase() + part.slice(1),
+        part[0].toUpperCase() +
+        part.slice(1),
     )
     .join(" ");
 
@@ -87,7 +89,9 @@ function getSubscriptionPriceCents(
     : 100_000;
 }
 
-function isUniqueViolation(error: unknown): boolean {
+function isUniqueViolation(
+  error: unknown,
+): boolean {
   if (
     typeof error !== "object" ||
     error === null
@@ -116,9 +120,12 @@ export async function createCompanyOnboarding(
   const email = normalizeEmail(parsed.email);
   const password = parsed.password;
   const industry = parsed.industry.trim();
-  const companySize = parsed.company_size.trim();
-  const subscription = parsed.subscription;
-  const domain = getEmailDomain(email);
+  const companySize =
+    parsed.company_size.trim();
+  const subscription =
+    parsed.subscription;
+  const domain =
+    getEmailDomain(email);
 
   if (
     !name ||
@@ -141,7 +148,9 @@ export async function createCompanyOnboarding(
   }
 
   /*
-   * Passwords are hashed before they ever reach the database.
+   * Passwords are hashed before they ever
+   * reach the database.
+   *
    * The plaintext password is never stored.
    */
   const {
@@ -149,16 +158,150 @@ export async function createCompanyOnboarding(
     salt: passwordSalt,
   } = hashPassword(password);
 
-  const requestedPlan = subscription;
+  const requestedPlan =
+    subscription;
+
   const priceCents =
-    getSubscriptionPriceCents(requestedPlan);
+    getSubscriptionPriceCents(
+      requestedPlan,
+    );
 
   try {
-    return await db.transaction(async (transaction) => {
-      /*
-       * The account application ID is also used as the
-       * organization ID.
-       *
-       * The application is created as pending_review and
-       * must be approved by Security before the account
-       * can
+    return await db.transaction(
+      async (transaction) => {
+        /*
+         * Create one application ID and use it
+         * as the organization ID.
+         */
+        const applicationId =
+          randomUUID();
+
+        /*
+         * Create the company organization.
+         *
+         * The account remains pending review
+         * until the security/admin approval flow
+         * changes its status.
+         */
+        const createdOrganizations =
+          await transaction
+            .insert(organizations)
+            .values({
+              id: applicationId,
+              name,
+              domain,
+              initials:
+                getInitials(name),
+              industry,
+              companySize,
+              status:
+                "pending_review",
+            })
+            .returning();
+
+        const organization =
+          createdOrganizations[0];
+
+        if (!organization) {
+          throw new Error(
+            "Unable to create the company organization.",
+          );
+        }
+
+        /*
+         * Create the first workspace administrator.
+         *
+         * Only the password hash and salt are stored.
+         * The plaintext password is never persisted.
+         */
+        const createdUsers =
+          await transaction
+            .insert(users)
+            .values({
+              organizationId:
+                organization.id,
+              email,
+              name:
+                getAdminName(email),
+              role: "admin",
+              passwordHash,
+              passwordSalt,
+              status:
+                "pending_review",
+            })
+            .returning();
+
+        const user =
+          createdUsers[0];
+
+        if (!user) {
+          throw new Error(
+            "Unable to create the company administrator.",
+          );
+        }
+
+        /*
+         * Create the subscription record.
+         *
+         * The subscription is also pending review
+         * until the account is approved.
+         */
+        await transaction
+          .insert(subscriptions)
+          .values({
+            organizationId:
+              organization.id,
+            plan: requestedPlan,
+            status:
+              "pending_review",
+            priceCents,
+          });
+
+        /*
+         * Create the security/account application.
+         *
+         * No password or authentication secret
+         * is stored in this table.
+         */
+        await transaction
+          .insert(accountApplications)
+          .values({
+            id: applicationId,
+            applicantName:
+              user.name,
+            applicantEmail:
+              email,
+            companyName:
+              name,
+            companyDomain:
+              domain,
+            industry,
+            companySize,
+            requestedPlan,
+            verificationStatus:
+              "pending_review",
+          });
+
+        return {
+          organization,
+          user,
+        };
+      },
+    );
+  } catch (error) {
+    /*
+     * The organization domain is unique.
+     *
+     * Convert the database unique constraint
+     * into the application-level error expected
+     * by the onboarding route.
+     */
+    if (
+      isUniqueViolation(error)
+    ) {
+      throw new CompanyDomainAlreadyExistsError();
+    }
+
+    throw error;
+  }
+}
