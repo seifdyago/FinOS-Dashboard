@@ -71,6 +71,49 @@ async function fetchBackendSession(): Promise<BackendSessionResponse> {
   return response.json() as Promise<BackendSessionResponse>;
 }
 
+
+
+type StoredAuthAccount = {
+  email: string;
+  passwordHash: string;
+  name: string;
+  role: string;
+  accountType: 'platform_admin' | 'company' | 'individual';
+  subscription: 'basic' | 'premium' | 'free';
+  tenantId: string;
+  tenantName: string;
+  idDocument?: { name: string; type: string; size: number };
+  phone?: string;
+  createdAt: string;
+};
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+async function hashPassword(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+
+
+function accountTenant(account: StoredAuthAccount): { id: string; name: string; domain: string; initials: string } {
+  const initials = account.tenantName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+  return {
+    id: account.tenantId,
+    name: account.tenantName,
+    domain: account.email.split('@')[1] || 'local',
+    initials: initials || 'FN',
+  };
+}
+
+function isPlatformOwner(email: string): boolean {
+  return normalizeEmail(email) === PLATFORM_OWNER_EMAIL;
+}
+
+
 type Icon = typeof Activity;
 
 type ChatAttachment = {
@@ -141,9 +184,16 @@ function isImageAttachment(attachment: ChatAttachment): boolean {
 
 
 function reportWorkspaceActivity(
+  organizationId: string,
+  userEmail: string,
   event: RecordActivityEventRequest,
 ): void {
-  void recordActivityEvent(event).catch(() => {
+  void recordActivityEvent(event, {
+    headers: {
+      'x-finos-organization-id': organizationId,
+      'x-finos-user-email': userEmail,
+    },
+  }).catch(() => {
     // Telemetry is additive and must not block customer workflows.
   });
 }
@@ -570,7 +620,7 @@ function EmployeeForm({ employee, onClose }: { employee?: Employee; onClose: () 
       if (employee) updateEmployee(employee.id, nextDraft);
       else {
         addEmployee(nextDraft);
-        reportWorkspaceActivity({
+        reportWorkspaceActivity(tenant.id, user.email, {
           event_type: 'employee_created',
           metadata: {
             employeeName: nextDraft.name,
@@ -1229,8 +1279,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
       title: account.role,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     }));
-    localStorage.setItem('finos-auth', '1');
-    localStorage.setItem('finos-auth-at', String(Date.now()));
     onLogin();
   };
 
