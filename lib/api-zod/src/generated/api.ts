@@ -51,3 +51,6 @@ export const CreateCompanyOnboardingResponse = zod.object({
   "organization_id": zod.string(),
   "email": zod.string(),
   "name":
+
+
+    
