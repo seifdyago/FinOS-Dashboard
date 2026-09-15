@@ -1,5 +1,9 @@
 import { Router, type IRouter } from "express";
-import { createHash, randomInt } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomInt,
+} from "node:crypto";
 import { eq, and, desc, isNull, sql } from "drizzle-orm";
 
 import {
@@ -8,6 +12,7 @@ import {
   platformAdmins,
   authSessions,
   users,
+  accountApplications,
   passwordResetTokens,
 } from "@workspace/db";
 
@@ -26,7 +31,21 @@ import {
 const PASSWORD_RESET_OTP_TTL_MS =
   10 * 60 * 1000;
 
+const PASSWORD_RESET_TOKEN_TTL_MS =
+  10 * 60 * 1000;
+
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+const PASSWORD_RESET_REQUEST_WINDOW_MS =
+  15 * 60 * 1000;
+
+const PASSWORD_RESET_MAX_REQUESTS_PER_WINDOW = 3;
+
+const PASSWORD_RESET_MAX_IP_REQUESTS_PER_WINDOW = 10;
+
+const PASSWORD_RESET_TEST_OTP_ENABLED =
+  process.env.FINOS_PASSWORD_RESET_TEST_MODE ===
+  "true";
 
 function hashResetOtp(otp: string): string {
   return createHash("sha256")
@@ -34,10 +53,45 @@ function hashResetOtp(otp: string): string {
     .digest("hex");
 }
 
+function hashResetToken(token: string): string {
+  return createHash("sha256")
+    .update(token)
+    .digest("hex");
+}
+
 function generateResetOtp(): string {
   return String(
     randomInt(100000, 1000000),
   );
+}
+
+function generateResetToken(): string {
+  return randomBytes(32).toString("hex");
+}
+
+function normalizePhone(value: string): string {
+  return value.replace(/[^0-9+]/g, "");
+}
+
+function normalizeDocumentReference(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function getRequestIp(req: {
+  ip?: string;
+  headers: Record<string, string | string[] | undefined>;
+}): string {
+  const forwarded = req.headers["x-forwarded-for"];
+
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0]!.trim();
+  }
+
+  if (Array.isArray(forwarded) && forwarded[0]) {
+    return forwarded[0].trim();
+  }
+
+  return req.ip || "unknown";
 }
 
 async function ensurePasswordResetTable(): Promise<void> {
@@ -49,14 +103,86 @@ async function ensurePasswordResetTable(): Promise<void> {
       expires_at timestamptz NOT NULL,
       attempts integer NOT NULL DEFAULT 0,
       used_at timestamptz,
-      created_at timestamptz NOT NULL DEFAULT now()
+      created_at timestamptz NOT NULL DEFAULT now(),
+      reset_token_hash text,
+      reset_token_expires_at timestamptz
     )
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE password_reset_tokens
+    ADD COLUMN IF NOT EXISTS reset_token_hash text
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE password_reset_tokens
+    ADD COLUMN IF NOT EXISTS reset_token_expires_at timestamptz
   `);
 
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx
     ON password_reset_tokens(user_id)
   `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS password_reset_tokens_reset_token_hash_idx
+    ON password_reset_tokens(reset_token_hash)
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS password_reset_rate_limits (
+      key_hash text PRIMARY KEY,
+      window_started_at timestamptz NOT NULL,
+      request_count integer NOT NULL DEFAULT 0
+    )
+  `);
+}
+
+async function consumeRateLimit(
+  key: string,
+  maxRequests: number,
+  now = new Date(),
+): Promise<boolean> {
+  const keyHash = createHash("sha256")
+    .update(key)
+    .digest("hex");
+
+  const windowStartedAt = new Date(
+    now.getTime() - PASSWORD_RESET_REQUEST_WINDOW_MS,
+  );
+
+  const rows = await db.execute(sql`
+    INSERT INTO password_reset_rate_limits (
+      key_hash,
+      window_started_at,
+      request_count
+    )
+    VALUES (
+      ${keyHash},
+      ${now},
+      1
+    )
+    ON CONFLICT (key_hash)
+    DO UPDATE SET
+      window_started_at = CASE
+        WHEN password_reset_rate_limits.window_started_at <= ${windowStartedAt}
+          THEN ${now}
+        ELSE password_reset_rate_limits.window_started_at
+      END,
+      request_count = CASE
+        WHEN password_reset_rate_limits.window_started_at <= ${windowStartedAt}
+          THEN 1
+        ELSE password_reset_rate_limits.request_count + 1
+      END
+    RETURNING request_count
+  `);
+
+  const requestCount = Number(
+    (rows as unknown as { rows?: Array<{ request_count: number }> })
+      .rows?.[0]?.request_count ?? maxRequests + 1,
+  );
+
+  return requestCount <= maxRequests;
 }
 
 const router: IRouter = Router();
@@ -607,6 +733,19 @@ router.post(
         ? normalizeEmail(req.body.email)
         : "";
 
+    const phone =
+      typeof req.body?.phone === "string"
+        ? normalizePhone(req.body.phone)
+        : "";
+
+    const documentReference =
+      typeof req.body?.documentReference ===
+      "string"
+        ? normalizeDocumentReference(
+            req.body.documentReference,
+          )
+        : "";
+
     if (!email) {
       res.status(400).json({
         error: "Email is required.",
@@ -616,6 +755,28 @@ router.post(
 
     try {
       await ensurePasswordResetTable();
+
+      const ip = getRequestIp(req);
+
+      const emailAllowed =
+        await consumeRateLimit(
+          `email:${email}`,
+          PASSWORD_RESET_MAX_REQUESTS_PER_WINDOW,
+        );
+
+      const ipAllowed =
+        await consumeRateLimit(
+          `ip:${ip}`,
+          PASSWORD_RESET_MAX_IP_REQUESTS_PER_WINDOW,
+        );
+
+      if (!emailAllowed || !ipAllowed) {
+        res.status(429).json({
+          error:
+            "Too many password reset requests. Please try again later.",
+        });
+        return;
+      }
 
       const rows = await db
         .select({
@@ -629,7 +790,7 @@ router.post(
 
       const user = rows[0];
 
-      // Do not reveal whether an email exists.
+      // Keep the account existence response generic.
       if (
         !user ||
         user.status !== "active"
@@ -637,7 +798,90 @@ router.post(
         res.status(200).json({
           accepted: true,
           message:
-            "If the account is eligible, a verification code has been generated.",
+            "If the account is eligible, a verification code will be sent.",
+        });
+        return;
+      }
+
+      /*
+       * Identity verification is based on the
+       * registration application. The recovery
+       * request must prove the registered phone
+       * and document reference when those values
+       * exist on the application.
+       */
+      const applicationRows =
+        await db
+          .select({
+            applicantPhone:
+              accountApplications.applicantPhone,
+            documentReference:
+              accountApplications.documentReference,
+            verificationStatus:
+              accountApplications.verificationStatus,
+          })
+          .from(accountApplications)
+          .where(
+            eq(
+              accountApplications.applicantEmail,
+              email,
+            ),
+          )
+          .orderBy(
+            desc(
+              accountApplications.createdAt,
+            ),
+          )
+          .limit(1);
+
+      const application =
+        applicationRows[0];
+
+      if (!application) {
+        res.status(403).json({
+          error:
+            "Account recovery requires a verified registration record. Please contact FinOS security support.",
+        });
+        return;
+      }
+
+      const registeredPhone =
+        application.applicantPhone
+          ? normalizePhone(
+              application.applicantPhone,
+            )
+          : "";
+
+      const registeredDocument =
+        application.documentReference
+          ? normalizeDocumentReference(
+              application.documentReference,
+            )
+          : "";
+
+      if (
+        !registeredPhone ||
+        !registeredDocument ||
+        !phone ||
+        !documentReference ||
+        registeredPhone !== phone ||
+        registeredDocument !==
+          documentReference
+      ) {
+        res.status(403).json({
+          error:
+            "The account verification details do not match the registration record.",
+        });
+        return;
+      }
+
+      if (
+        application.verificationStatus !==
+          "approved"
+      ) {
+        res.status(403).json({
+          error:
+            "This account is not eligible for self-service password recovery until identity verification is approved.",
         });
         return;
       }
@@ -678,32 +922,53 @@ router.post(
           attempts: 0,
         });
 
-      /*
-       * Temporary launch-testing delivery.
-       *
-       * The OTP is written to the server log,
-       * never returned to the browser.
-       *
-       * Later this log delivery is replaced
-       * by the real SMS/email provider.
-       */
-      req.log.info(
-        {
-          event:
-            "password_reset_otp_generated",
-          email: user.email,
-          expiresAt:
-            expiresAt.toISOString(),
-          otp,
-        },
-        "Password reset OTP generated for launch testing",
-      );
+      if (PASSWORD_RESET_TEST_OTP_ENABLED) {
+        req.log.info(
+          {
+            event:
+              "password_reset_otp_generated_test_mode",
+            userId: user.id,
+            expiresAt:
+              expiresAt.toISOString(),
+            otp,
+          },
+          "Password reset OTP generated in explicit test mode",
+        );
+      } else {
+        /*
+         * Production delivery integration point.
+         * The OTP is intentionally NOT returned to
+         * the browser and is never logged in
+         * production. The SMS/email provider must
+         * be connected here before production use.
+         */
+        req.log.info(
+          {
+            event:
+              "password_reset_delivery_pending",
+            userId: user.id,
+            expiresAt:
+              expiresAt.toISOString(),
+          },
+          "Password reset delivery provider is not configured",
+        );
+      }
 
-      res.status(200).json({
+      const response: {
+        accepted: boolean;
+        message: string;
+        test_otp?: string;
+      } = {
         accepted: true,
         message:
-          "If the account is eligible, a verification code has been generated.",
-      });
+          "If the account is eligible, a verification code will be sent.",
+      };
+
+      if (PASSWORD_RESET_TEST_OTP_ENABLED) {
+        response.test_otp = otp;
+      }
+
+      res.status(200).json(response);
     } catch (error) {
       req.log.error(
         { error },
@@ -719,7 +984,7 @@ router.post(
 );
 
 router.post(
-  "/auth/password-reset/complete",
+  "/auth/password-reset/verify",
   async (req, res): Promise<void> => {
     const email =
       typeof req.body?.email === "string"
@@ -731,17 +996,6 @@ router.post(
         ? req.body.otp.trim()
         : "";
 
-    /*
-     * IMPORTANT:
-     * This is the new password that will be
-     * hashed server-side and stored in users.
-     */
-    const newPassword =
-      typeof req.body?.newPassword ===
-      "string"
-        ? req.body.newPassword
-        : "";
-
     if (
       !email ||
       !/^\d{6}$/.test(otp)
@@ -749,14 +1003,6 @@ router.post(
       res.status(400).json({
         error:
           "Email and a valid 6-digit verification code are required.",
-      });
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      res.status(400).json({
-        error:
-          "New password must be at least 8 characters.",
       });
       return;
     }
@@ -889,13 +1135,152 @@ router.post(
         return;
       }
 
-      /*
-       * IMPORTANT PASSWORD STEP:
-       *
-       * The raw password is NEVER stored.
-       * hashPassword() creates a new salt and
-       * derives a secure password hash.
-       */
+      const resetToken =
+        generateResetToken();
+
+      const resetTokenExpiresAt =
+        new Date(
+          Date.now() +
+            PASSWORD_RESET_TOKEN_TTL_MS,
+        );
+
+      await db.execute(sql`
+        UPDATE password_reset_tokens
+        SET
+          reset_token_hash = ${hashResetToken(resetToken)},
+          reset_token_expires_at = ${resetTokenExpiresAt},
+          used_at = now()
+        WHERE id = ${token.id}
+      `);
+
+      res.status(200).json({
+        verified: true,
+        reset_token: resetToken,
+        expires_at:
+          resetTokenExpiresAt.toISOString(),
+      });
+    } catch (error) {
+      req.log.error(
+        { error },
+        "Password reset OTP verification failed",
+      );
+
+      res.status(500).json({
+        error:
+          "Unable to verify the password reset code right now.",
+      });
+    }
+  },
+);
+
+router.post(
+  "/auth/password-reset/complete",
+  async (req, res): Promise<void> => {
+    const email =
+      typeof req.body?.email === "string"
+        ? normalizeEmail(req.body.email)
+        : "";
+
+    const resetToken =
+      typeof req.body?.resetToken ===
+      "string"
+        ? req.body.resetToken.trim()
+        : "";
+
+    const newPassword =
+      typeof req.body?.newPassword ===
+      "string"
+        ? req.body.newPassword
+        : "";
+
+    if (!email || !resetToken) {
+      res.status(400).json({
+        error:
+          "Email and a valid password reset token are required.",
+      });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      res.status(400).json({
+        error:
+          "New password must be at least 8 characters.",
+      });
+      return;
+    }
+
+    try {
+      await ensurePasswordResetTable();
+
+      const userRows = await db
+        .select({
+          id: users.id,
+          status: users.status,
+        })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      const user = userRows[0];
+
+      if (
+        !user ||
+        user.status !== "active"
+      ) {
+        res.status(400).json({
+          error:
+            "The password reset token is invalid or expired.",
+        });
+        return;
+      }
+
+      const tokenResult = await db.execute(sql`
+        SELECT
+          id,
+          reset_token_expires_at
+        FROM password_reset_tokens
+        WHERE
+          user_id = ${user.id}
+          AND reset_token_hash = ${hashResetToken(resetToken)}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      const tokenRow = (
+        tokenResult as unknown as {
+          rows?: Array<{
+            id: string;
+            reset_token_expires_at: Date | string | null;
+          }>;
+        }
+      ).rows?.[0];
+
+      if (!tokenRow) {
+        res.status(400).json({
+          error:
+            "The password reset token is invalid or expired.",
+        });
+        return;
+      }
+
+      const resetTokenExpiresAt =
+        tokenRow.reset_token_expires_at
+          ? new Date(tokenRow.reset_token_expires_at)
+          : null;
+
+
+      if (
+        !resetTokenExpiresAt ||
+        resetTokenExpiresAt.getTime() <=
+          Date.now()
+      ) {
+        res.status(400).json({
+          error:
+            "The password reset token is invalid or expired.",
+        });
+        return;
+      }
+
       const {
         hash: passwordHash,
         salt: passwordSalt,
@@ -905,9 +1290,6 @@ router.post(
 
       await db.transaction(
         async (transaction) => {
-          /*
-           * Save the new password hash + salt.
-           */
           await transaction
             .update(users)
             .set({
@@ -922,10 +1304,6 @@ router.post(
               ),
             );
 
-          /*
-           * Password change invalidates
-           * every previous login session.
-           */
           await transaction
             .delete(authSessions)
             .where(
@@ -935,21 +1313,14 @@ router.post(
               ),
             );
 
-          /*
-           * Make this reset token
-           * permanently unusable.
-           */
-          await transaction
-            .update(passwordResetTokens)
-            .set({
-              usedAt: new Date(),
-            })
-            .where(
-              eq(
-                passwordResetTokens.id,
-                token.id,
-              ),
-            );
+          await transaction.execute(sql`
+            UPDATE password_reset_tokens
+            SET
+              reset_token_hash = NULL,
+              reset_token_expires_at = NULL,
+              used_at = now()
+            WHERE id = ${tokenRow.id}
+          `);
         },
       );
 
