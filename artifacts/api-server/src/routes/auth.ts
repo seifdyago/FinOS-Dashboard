@@ -3,6 +3,7 @@ import {
   createHash,
   randomBytes,
   randomInt,
+  timingSafeEqual,
 } from "node:crypto";
 import { eq, and, desc, isNull, sql } from "drizzle-orm";
 
@@ -71,6 +72,16 @@ function generateResetToken(): string {
 
 function normalizePhone(value: string): string {
   return value.replace(/[^0-9+]/g, "");
+}
+
+function normalizeIdNumber(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function hashNationalId(value: string): string {
+  return createHash("sha256")
+    .update(normalizeIdNumber(value))
+    .digest("hex");
 }
 
 function normalizeDocumentReference(value: string): string {
@@ -248,14 +259,36 @@ function hashLegacyPassword(
     .digest("hex");
 }
 
+function isLegacySha256Password(
+  password: string,
+  storedHash: string | null | undefined,
+): boolean {
+  if (!storedHash || !/^[a-f0-9]{64}$/i.test(storedHash)) {
+    return false;
+  }
+
+  const actual = Buffer.from(
+    hashLegacyPassword(password),
+    "hex",
+  );
+  const expected = Buffer.from(storedHash, "hex");
+
+  return (
+    expected.length === actual.length &&
+    timingSafeEqual(actual, expected)
+  );
+}
+
 function isLegacyPlatformOwnerPassword(
   email: string,
   password: string,
 ): boolean {
   return (
     email === PLATFORM_OWNER_EMAIL &&
-    hashLegacyPassword(password) ===
-      PLATFORM_OWNER_LEGACY_SHA256
+    isLegacySha256Password(
+      password,
+      PLATFORM_OWNER_LEGACY_SHA256,
+    )
   );
 }
 
@@ -537,15 +570,45 @@ router.post(
 
       let user = rows[0];
 
-      const passwordIsValid =
-        user?.passwordHash &&
-        user?.passwordSalt
-          ? verifyPassword(
-              password,
-              user.passwordHash,
-              user.passwordSalt,
-            )
-          : false;
+      let passwordIsValid =
+        Boolean(
+          user?.passwordHash &&
+          user?.passwordSalt &&
+          verifyPassword(
+            password,
+            user.passwordHash,
+            user.passwordSalt,
+          ),
+        );
+
+      const legacyPasswordIsValid =
+        Boolean(
+          user?.passwordHash &&
+          isLegacySha256Password(
+            password,
+            user.passwordHash,
+          ),
+        );
+
+      if (user && legacyPasswordIsValid) {
+        const upgraded = hashPassword(password);
+
+        await db
+          .update(users)
+          .set({
+            passwordHash: upgraded.hash,
+            passwordSalt: upgraded.salt,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, user.id));
+
+        user = {
+          ...user,
+          passwordHash: upgraded.hash,
+          passwordSalt: upgraded.salt,
+        };
+        passwordIsValid = true;
+      }
 
       const shouldBootstrapOwner =
         email ===
@@ -738,17 +801,15 @@ router.post(
         ? normalizePhone(req.body.phone)
         : "";
 
-    const documentReference =
-      typeof req.body?.documentReference ===
-      "string"
-        ? normalizeDocumentReference(
-            req.body.documentReference,
-          )
+    const idNumber =
+      typeof req.body?.idNumber === "string"
+        ? normalizeIdNumber(req.body.idNumber)
         : "";
 
-    if (!email) {
+    if (!email || !phone || !/^\d{14}$/.test(idNumber)) {
       res.status(400).json({
-        error: "Email is required.",
+        error:
+          "Email, phone, and a valid 14-digit national ID are required.",
       });
       return;
     }
@@ -815,8 +876,8 @@ router.post(
           .select({
             applicantPhone:
               accountApplications.applicantPhone,
-            documentReference:
-              accountApplications.documentReference,
+            idNumberHash:
+              accountApplications.idNumberHash,
             verificationStatus:
               accountApplications.verificationStatus,
           })
@@ -852,21 +913,17 @@ router.post(
             )
           : "";
 
-      const registeredDocument =
-        application.documentReference
-          ? normalizeDocumentReference(
-              application.documentReference,
-            )
-          : "";
+      const registeredIdNumberHash =
+        application.idNumberHash ?? "";
 
       if (
         !registeredPhone ||
-        !registeredDocument ||
+        !registeredIdNumberHash ||
         !phone ||
-        !documentReference ||
+        !idNumber ||
         registeredPhone !== phone ||
-        registeredDocument !==
-          documentReference
+        hashNationalId(idNumber) !==
+          registeredIdNumberHash
       ) {
         res.status(403).json({
           error:
