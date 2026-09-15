@@ -1219,7 +1219,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
   const [resetEmail, setResetEmail] = useState('');
   const [resetPhone, setResetPhone] = useState('');
   const [resetIdNumber, setResetIdNumber] = useState('');
-  const [resetIdName, setResetIdName] = useState('');
   const [resetOtp, setResetOtp] = useState('');
   const [resetNewPassword, setResetNewPassword] = useState('');
   const [resetStep, setResetStep] = useState<1 | 2>(1);
@@ -1372,7 +1371,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
     const normalizedResetEmail = normalizeEmail(resetEmail);
     const normalizedResetPhone = resetPhone.trim().replace(/[^\d+]/g, '');
     const normalizedResetIdNumber = resetIdNumber.trim();
-    const normalizedResetDocument = resetIdName.trim();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedResetEmail)) {
       setError('Enter the email address registered with your FinOS account.');
@@ -1386,11 +1384,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
     if (!/^\d{14}$/.test(normalizedResetIdNumber)) {
       setError('Enter the 14-digit national ID number used during registration.');
-      return;
-    }
-
-    if (!normalizedResetDocument) {
-      setError('Enter the ID/document filename used during registration.');
       return;
     }
 
@@ -1409,7 +1402,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
           email: normalizedResetEmail,
           phone: normalizedResetPhone,
           idNumber: normalizedResetIdNumber,
-          documentReference: normalizedResetDocument,
         }),
       });
 
@@ -1422,7 +1414,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
       setResetEmail(normalizedResetEmail);
       setResetPhone(normalizedResetPhone);
-      setResetIdName(normalizedResetDocument);
       setResetOtp(typeof payload?.test_otp === 'string' ? payload.test_otp : '');
       setResetStep(2);
 
@@ -1559,7 +1550,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'basic' | 'premium')} className={fieldClass}><option value="basic">Basic subscription</option><option value="premium">Premium subscription</option></select></label>
         <label><span className="kicker mb-2 block">ID card / identity document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-individual-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name} • ready to attach</span>}</label>
       </div>}
-      {step === 3 && <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Phone</span><span className="text-right text-[#e2e8f0]">{phone}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">National ID</span><span className="text-right text-[#e2e8f0]">{idNumber}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">Password is stored only as a SHA-256 verifier in this frontend demo. Production authentication and document storage must be handled by the server.</div></div></div>}
+      {step === 3 && <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Phone</span><span className="text-right text-[#e2e8f0]">{phone}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">National ID</span><span className="text-right text-[#e2e8f0]">{idNumber}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">Password is sent securely to the onboarding backend, where the server stores only a password hash and salt. Registration and identity verification are handled by the server.</div></div></div>}
       {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
       <button onClick={step === 3 ? createAccount : nextOnboardingStep} disabled={loading} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm">{loading ? <RefreshCw size={15} className="animate-spin"/> : step === 3 ? <UserPlus size={15}/> : <ArrowUpRight size={15}/>} {loading ? 'Creating account...' : step === 3 ? 'Create account' : 'Continue'}</button>
       {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]">Previous step</button>}
@@ -1574,8 +1565,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
           <label className="block"><span className="kicker mb-2 block">Email</span><input value={resetEmail} onChange={e=>setResetEmail(e.target.value)} type="email" className={fieldClass} placeholder="you@company.com"/></label>
           <label className="block"><span className="kicker mb-2 block">Registered phone</span><input value={resetPhone} onChange={e=>setResetPhone(e.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000" autoComplete="tel"/></label>
           <label className="block"><span className="kicker mb-2 block">National ID number</span><input value={resetIdNumber} onChange={e=>setResetIdNumber(e.target.value.replace(/\D/g, '').slice(0, 14))} inputMode="numeric" maxLength={14} className={fieldClass} placeholder="14-digit national ID" autoComplete="off"/></label>
-          <label className="block"><span className="kicker mb-2 block">ID/document filename</span><input value={resetIdName} onChange={e=>setResetIdName(e.target.value)} className={fieldClass} placeholder="The document used at registration" autoComplete="off"/></label>
-          <p className="text-[10px] leading-5 text-[#71899d]">Your email, registered phone, and document reference are checked against the server-side registration record. The OTP is created and verified only by the authentication backend.</p>
+          <p className="text-[10px] leading-5 text-[#71899d]">Your email, registered phone, and national ID are checked against the server-side registration record. The OTP is created and verified only by the authentication backend.</p>
           <button onClick={() => void requestPasswordReset()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm disabled:opacity-60">{loading ? <Loader2 size={15} className="animate-spin"/> : <Phone size={15}/>} {loading ? 'Sending code...' : 'Verify account'}</button>
         </div> : <div className="space-y-4">
           <label className="block"><span className="kicker mb-2 block">Verification code</span><input value={resetOtp} onChange={e=>setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className={fieldClass} placeholder="123456"/></label>
