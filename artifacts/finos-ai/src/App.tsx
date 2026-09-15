@@ -1361,12 +1361,110 @@ function Login({ onLogin }: { onLogin: () => void }) {
     }
   };
 
-  const requestPasswordReset = () => {
-    setError('Secure password reset is not enabled yet. Please contact your FinOS security administrator.');
+  const requestPasswordReset = async () => {
+    const normalizedResetEmail = normalizeEmail(resetEmail);
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedResetEmail)) {
+      setError('Enter the email address registered with your FinOS account.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/password-reset/request', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          email: normalizedResetEmail,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(typeof payload?.error === 'string' ? payload.error : 'Unable to start password recovery. Please try again.');
+        return;
+      }
+
+      setResetEmail(normalizedResetEmail);
+      setResetOtp(typeof payload?.test_otp === 'string' ? payload.test_otp : '');
+      setResetStep(2);
+
+      if (typeof payload?.test_otp === 'string') {
+        toast.success(`Verification code generated for test mode: ${payload.test_otp}`);
+      } else {
+        toast.success('Verification code sent. Enter the code to continue.');
+      }
+    } catch {
+      setError('Unable to reach the authentication server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const completePasswordReset = async () => {
-    setError('Secure password reset is not enabled yet. Please contact your FinOS security administrator.');
+    const normalizedResetEmail = normalizeEmail(resetEmail);
+    const otp = resetOtp.trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedResetEmail)) {
+      setError('Enter the email address registered with your FinOS account.');
+      return;
+    }
+
+    if (!/^\d{6}$/.test(otp)) {
+      setError('Enter the 6-digit verification code.');
+      return;
+    }
+
+    if (resetNewPassword.length < 8) {
+      setError('The new password must be at least 8 characters.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/password-reset/complete', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          email: normalizedResetEmail,
+          otp,
+          newPassword: resetNewPassword,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(typeof payload?.error === 'string' ? payload.error : 'The verification code is invalid or expired. Please request a new code.');
+        return;
+      }
+
+      setPassword('');
+      setResetOtp('');
+      setResetNewPassword('');
+      setResetStep(1);
+      setForgotOpen(false);
+      setError('');
+      setEmail(normalizedResetEmail);
+      toast.success('Password reset successfully. Sign in with your new password.');
+    } catch {
+      setError('Unable to reach the authentication server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };  const fieldClass = 'input-dark h-11 w-full rounded-lg px-3 text-sm';
   const onboardingPanel = (
     <>
@@ -1410,14 +1508,14 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <div className="mb-6 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#26194d] text-[#a78bfa]"><KeyRound size={18}/></div><div><div className="kicker">Account recovery</div><h2 className="display-font text-[25px] font-semibold text-white">Reset your password.</h2></div></div>
         {resetStep === 1 ? <div className="space-y-4">
           <label className="block"><span className="kicker mb-2 block">Email</span><input value={resetEmail} onChange={e=>setResetEmail(e.target.value)} type="email" className={fieldClass} placeholder="you@company.com"/></label>
-          <label className="block"><span className="kicker mb-2 block">Registered phone</span><input value={resetPhone} onChange={e=>setResetPhone(e.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000"/></label>
-          <label className="block"><span className="kicker mb-2 block">ID/document filename</span><input value={resetIdName} onChange={e=>setResetIdName(e.target.value)} className={fieldClass} placeholder="The document used at registration"/></label>
-          <p className="text-[10px] leading-5 text-[#71899d]">Test mode: a verification code is generated locally. Production SMS/identity verification must be handled by the backend.</p>
-          <button onClick={requestPasswordReset} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm"><Phone size={15}/> Verify account</button>
+          <label className="block"><span className="kicker mb-2 block">Registered phone</span><input value={resetPhone} onChange={e=>setResetPhone(e.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000" autoComplete="tel"/></label>
+          <label className="block"><span className="kicker mb-2 block">ID/document filename</span><input value={resetIdName} onChange={e=>setResetIdName(e.target.value)} className={fieldClass} placeholder="The document used at registration" autoComplete="off"/></label>
+          <p className="text-[10px] leading-5 text-[#71899d]">Your verification code is created and checked by the secure authentication backend. Never generate or verify the OTP in the browser.</p>
+          <button onClick={() => void requestPasswordReset()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm disabled:opacity-60">{loading ? <Loader2 size={15} className="animate-spin"/> : <Phone size={15}/>} {loading ? 'Sending code...' : 'Verify account'}</button>
         </div> : <div className="space-y-4">
-          <label className="block"><span className="kicker mb-2 block">Verification code</span><input value={resetOtp} onChange={e=>setResetOtp(e.target.value)} inputMode="numeric" className={fieldClass} placeholder="123456"/></label>
-          <label className="block"><span className="kicker mb-2 block">New password</span><input value={resetNewPassword} onChange={e=>setResetNewPassword(e.target.value)} type="password" className={fieldClass} placeholder="At least 8 characters"/></label>
-          <button onClick={() => void completePasswordReset()} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm"><KeyRound size={15}/> Reset password</button>
+          <label className="block"><span className="kicker mb-2 block">Verification code</span><input value={resetOtp} onChange={e=>setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className={fieldClass} placeholder="123456"/></label>
+          <label className="block"><span className="kicker mb-2 block">New password</span><input value={resetNewPassword} onChange={e=>setResetNewPassword(e.target.value)} type="password" autoComplete="new-password" className={fieldClass} placeholder="At least 8 characters"/></label>
+          <button onClick={() => void completePasswordReset()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm disabled:opacity-60">{loading ? <Loader2 size={15} className="animate-spin"/> : <KeyRound size={15}/>} {loading ? 'Resetting...' : 'Reset password'}</button>
         </div>}
         {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
         <button onClick={()=>{setForgotOpen(false);setError('')}} className="btn-quiet mt-3 h-10 w-full rounded-lg text-[11px]">Back to sign in</button>
