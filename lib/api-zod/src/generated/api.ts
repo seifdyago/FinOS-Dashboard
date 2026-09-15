@@ -235,3 +235,5 @@ export const RecordActivityEventBody = zod.object({
   "usage_metric_type": zod.string().nullable().optional(),
   "usage_value": zod.number().nullable().optional()
 });
+
+export const RecordActivityEventResponse = zod.void();
