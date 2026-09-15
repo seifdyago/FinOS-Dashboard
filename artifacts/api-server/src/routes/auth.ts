@@ -1,12 +1,14 @@
 import { Router, type IRouter } from "express";
-import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { createHash, randomInt } from "node:crypto";
+import { eq, and, desc, isNull, sql } from "drizzle-orm";
 
 import {
   db,
   organizations,
   platformAdmins,
+  authSessions,
   users,
+  passwordResetTokens,
 } from "@workspace/db";
 
 import {
@@ -20,6 +22,36 @@ import {
   hashPassword,
   verifyPassword,
 } from "../lib/password-auth";
+
+const PASSWORD_RESET_OTP_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+function hashResetOtp(otp: string): string {
+  return createHash("sha256").update(otp).digest("hex");
+}
+
+function generateResetOtp(): string {
+  return String(randomInt(100000, 1000000));
+}
+
+async function ensurePasswordResetTable(): Promise<void> {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      otp_hash text NOT NULL,
+      expires_at timestamptz NOT NULL,
+      attempts integer NOT NULL DEFAULT 0,
+      used_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx
+    ON password_reset_tokens(user_id)
+  `);
+}
 
 const router: IRouter = Router();
 
@@ -505,6 +537,321 @@ router.post(
       res.status(500).json({
         error:
           "Unable to sign out right now.",
+      });
+    }
+  },
+);
+
+router.post(
+  "/auth/password-reset/request",
+  async (req, res): Promise<void> => {
+    const email =
+      typeof req.body?.email === "string"
+        ? normalizeEmail(req.body.email)
+        : "";
+
+    if (!email) {
+      res.status(400).json({
+        error: "Email is required.",
+      });
+      return;
+    }
+
+    try {
+      await ensurePasswordResetTable();
+
+      const rows = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          status: users.status,
+        })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      const user = rows[0];
+
+      // Do not reveal whether an email exists.
+      if (!user || user.status !== "active") {
+        res.status(200).json({
+          accepted: true,
+          message:
+            "If the account is eligible, a verification code has been generated.",
+        });
+        return;
+      }
+
+      // Invalidate previous unused reset codes for this user.
+      await db
+        .update(passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(
+          and(
+            eq(passwordResetTokens.userId, user.id),
+            isNull(passwordResetTokens.usedAt),
+          ),
+        );
+
+      const otp = generateResetOtp();
+
+      const expiresAt = new Date(
+        Date.now() + PASSWORD_RESET_OTP_TTL_MS,
+      );
+
+      await db.insert(passwordResetTokens).values({
+        userId: user.id,
+        otpHash: hashResetOtp(otp),
+        expiresAt,
+        attempts: 0,
+      });
+
+      // Temporary launch-testing delivery.
+      // The OTP is written only to the server log.
+      // It is never returned in the API response.
+      req.log.info(
+        {
+          event: "password_reset_otp_generated",
+          email: user.email,
+          expiresAt: expiresAt.toISOString(),
+          otp,
+        },
+        "Password reset OTP generated for launch testing",
+      );
+
+      res.status(200).json({
+        accepted: true,
+        message:
+          "If the account is eligible, a verification code has been generated.",
+      });
+    } catch (error) {
+      req.log.error(
+        { error },
+        "Password reset request failed",
+      );
+
+      res.status(500).json({
+        error:
+          "Unable to start password reset right now.",
+      });
+    }
+  },
+);
+
+router.post(
+  "/auth/password-reset/complete",
+  async (req, res): Promise<void> => {
+    const email =
+      typeof req.body?.email === "string"
+        ? normalizeEmail(req.body.email)
+        : "";
+
+    const otp =
+      typeof req.body?.otp === "string"
+        ? req.body.otp.trim()
+        : "";
+
+    const newPassword =
+      typeof req.body?.newPassword === "string"
+        ? req.body.newPassword
+        : "";
+
+    if (!email || !/^\d{6}$/.test(otp)) {
+      res.status(400).json({
+        error:
+          "Email and a valid 6-digit verification code are required.",
+      });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      res.status(400).json({
+        error:
+          "New password must be at least 8 characters.",
+      });
+      return;
+    }
+
+    try {
+      await ensurePasswordResetTable();
+
+      const userRows = await db
+        .select({
+          id: users.id,
+          status: users.status,
+        })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      const user = userRows[0];
+
+      if (!user || user.status !== "active") {
+        res.status(400).json({
+          error:
+            "The verification code is invalid or expired.",
+        });
+        return;
+      }
+
+      const tokenRows = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(
+          and(
+            eq(
+              passwordResetTokens.userId,
+              user.id,
+            ),
+            isNull(passwordResetTokens.usedAt),
+          ),
+        )
+        .orderBy(
+          desc(passwordResetTokens.createdAt),
+        )
+        .limit(1);
+
+      const token = tokenRows[0];
+
+      if (!token) {
+        res.status(400).json({
+          error:
+            "The verification code is invalid or expired.",
+        });
+        return;
+      }
+
+      if (
+        token.expiresAt.getTime() <=
+        Date.now()
+      ) {
+        await db
+          .update(passwordResetTokens)
+          .set({
+            usedAt: new Date(),
+          })
+          .where(
+            eq(
+              passwordResetTokens.id,
+              token.id,
+            ),
+          );
+
+        res.status(400).json({
+          error:
+            "The verification code is invalid or expired.",
+        });
+        return;
+      }
+
+      if (
+        token.attempts >=
+        PASSWORD_RESET_MAX_ATTEMPTS
+      ) {
+        await db
+          .update(passwordResetTokens)
+          .set({
+            usedAt: new Date(),
+          })
+          .where(
+            eq(
+              passwordResetTokens.id,
+              token.id,
+            ),
+          );
+
+        res.status(429).json({
+          error:
+            "Too many verification attempts. Request a new code.",
+        });
+        return;
+      }
+
+      const otpIsValid =
+        hashResetOtp(otp) ===
+        token.otpHash;
+
+      if (!otpIsValid) {
+        await db
+          .update(passwordResetTokens)
+          .set({
+            attempts:
+              token.attempts + 1,
+          })
+          .where(
+            eq(
+              passwordResetTokens.id,
+              token.id,
+            ),
+          );
+
+        res.status(400).json({
+          error:
+            "The verification code is invalid or expired.",
+        });
+        return;
+      }
+
+      const {
+        hash: passwordHash,
+        salt: passwordSalt,
+      } = hashPassword(newPassword);
+
+      await db.transaction(
+        async (transaction) => {
+          await transaction
+            .update(users)
+            .set({
+              passwordHash,
+              passwordSalt,
+              updatedAt: new Date(),
+            })
+            .where(
+              eq(
+                users.id,
+                user.id,
+              ),
+            );
+
+          // Changing the password invalidates
+          // every existing login session.
+          await transaction
+            .delete(authSessions)
+            .where(
+              eq(
+                authSessions.userId,
+                user.id,
+              ),
+            );
+
+          await transaction
+            .update(passwordResetTokens)
+            .set({
+              usedAt: new Date(),
+            })
+            .where(
+              eq(
+                passwordResetTokens.id,
+                token.id,
+              ),
+            );
+        },
+      );
+
+      res.status(200).json({
+        reset: true,
+        message:
+          "Password reset successfully. Please sign in again.",
+      });
+    } catch (error) {
+      req.log.error(
+        { error },
+        "Password reset completion failed",
+      );
+
+      res.status(500).json({
+        error:
+          "Unable to reset the password right now.",
       });
     }
   },
