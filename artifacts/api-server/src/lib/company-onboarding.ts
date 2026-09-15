@@ -93,6 +93,15 @@ function getSubscriptionPriceCents(
     : 100_000;
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : undefined;
+  return code === "23505";
+}
+
 export async function createCompanyOnboarding(
   input: CompanyOnboardingInput,
 ): Promise<CompanyOnboardingResult> {
@@ -161,7 +170,7 @@ export async function createCompanyOnboarding(
     );
 
   try {
-      return await db.transaction(
+    return await db.transaction(
       async (transaction) => {
         /*
          * Create one application ID and use it
