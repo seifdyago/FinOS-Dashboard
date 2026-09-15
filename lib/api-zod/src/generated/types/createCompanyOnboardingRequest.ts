@@ -12,7 +12,19 @@ export interface CreateCompanyOnboardingRequest {
   /** Work email address */
   email: string;
   /** @minLength 1 */
+  phone: string;
+  /** @minLength 1 */
+  idNumber: string;
+  /** @minLength 1 */
+  documentReference: string;
+  /** @minLength 1 */
+  documentType: string;
+  /** @minLength 1 */
   industry: string;
   /** @minLength 1 */
   company_size: string;
+  /** Account password. The server stores only a secure password hash. */
+  password: string;
+  /** Requested subscription plan */
+  subscription: 'basic' | 'premium';
 }
