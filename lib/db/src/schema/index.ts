@@ -9,4 +9,5 @@ export * from "./activity-events";
 export * from "./usage-metrics";
 export * from "./account-applications";
 export * from "./auth-sessions";
+export * from "./password-reset-tokens";
 export * from "./relations";
