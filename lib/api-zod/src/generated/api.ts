@@ -7,25 +7,19 @@
  */
 import * as zod from 'zod';
 
-
 /**
  * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
   "status": zod.string()
-})
-
+});
 
 /**
  * Creates an organization and its initial admin user.
  * @summary Create a company workspace
  */
 export const createCompanyOnboardingBodyNameMin = 2;
-
-
-
-
 
 export const CreateCompanyOnboardingBody = zod.object({
   "name": zod.string().min(createCompanyOnboardingBodyNameMin),
@@ -34,23 +28,208 @@ export const CreateCompanyOnboardingBody = zod.object({
   "industry": zod.string().min(1),
   "company_size": zod.string().min(1),
   "subscription": zod.enum(['basic', 'premium']).describe('Requested subscription plan')
-})
+});
 
 export const CreateCompanyOnboardingResponse = zod.object({
   "organization": zod.object({
-  "id": zod.string(),
-  "name": zod.string(),
-  "domain": zod.string(),
-  "initials": zod.string(),
-  "industry": zod.string(),
-  "company_size": zod.string(),
-  "status": zod.string()
-}),
+    "id": zod.string(),
+    "name": zod.string(),
+    "domain": zod.string(),
+    "initials": zod.string(),
+    "industry": zod.string(),
+    "company_size": zod.string(),
+    "status": zod.string()
+  }),
   "user": zod.object({
+    "id": zod.string(),
+    "organization_id": zod.string(),
+    "email": zod.string(),
+    "name": zod.string(),
+    "role": zod.string(),
+    "status": zod.string()
+  })
+});
+
+/**
+ * Request a private knowledge file upload URL.
+ * @summary Request a private knowledge file upload URL
+ */
+export const RequestKnowledgeFileUploadUrlHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+});
+
+export const RequestKnowledgeFileUploadUrlBody = zod.object({
+  "original_file_name": zod.string().min(1),
+  "mime_type": zod.string().min(1),
+  "size_bytes": zod.number().min(1),
+  "employee_key": zod.string().nullable().optional()
+});
+
+export const RequestKnowledgeFileUploadUrlResponse = zod.object({
+  "upload_url": zod.string(),
+  "storage_key": zod.string()
+});
+
+/**
+ * List company knowledge files.
+ * @summary List company knowledge files
+ */
+export const ListKnowledgeFilesHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+});
+
+export const ListKnowledgeFilesResponse = zod.array(
+  zod.object({
+    "id": zod.string(),
+    "original_file_name": zod.string(),
+    "file_type": zod.string(),
+    "mime_type": zod.string(),
+    "size_bytes": zod.number(),
+    "storage_key": zod.string(),
+    "uploaded_by_user_id": zod.string().nullable(),
+    "uploader_name": zod.string(),
+    "created_at": zod.string(),
+    "employee_id": zod.string().nullable(),
+    "employee_name": zod.string().nullable(),
+    "status": zod.string()
+  })
+);
+
+/**
+ * Save uploaded knowledge file metadata.
+ * @summary Save uploaded knowledge file metadata
+ */
+export const FinalizeKnowledgeFileHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+});
+
+export const FinalizeKnowledgeFileBody = zod.object({
+  "original_file_name": zod.string().min(1),
+  "mime_type": zod.string().min(1),
+  "size_bytes": zod.number().min(1),
+  "storage_key": zod.string().min(1),
+  "employee_key": zod.string().nullable().optional()
+});
+
+export const FinalizeKnowledgeFileResponse = zod.object({
   "id": zod.string(),
-  "organization_id": zod.string(),
-  "email": zod.string(),
-  "name":
+  "original_file_name": zod.string(),
+  "file_type": zod.string(),
+  "mime_type": zod.string(),
+  "size_bytes": zod.number(),
+  "storage_key": zod.string(),
+  "uploaded_by_user_id": zod.string().nullable(),
+  "uploader_name": zod.string(),
+  "created_at": zod.string(),
+  "employee_id": zod.string().nullable(),
+  "employee_name": zod.string().nullable(),
+  "status": zod.string()
+});
 
+/**
+ * Get a private knowledge file download URL.
+ * @summary Get a private knowledge file download URL
+ */
+export const GetKnowledgeFileDownloadUrlHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+});
 
-    
+export const GetKnowledgeFileDownloadUrlParams = zod.object({
+  "fileId": zod.string()
+});
+
+export const GetKnowledgeFileDownloadUrlResponse = zod.object({
+  "download_url": zod.string()
+});
+
+/**
+ * Delete a company knowledge file.
+ * @summary Delete a company knowledge file
+ */
+export const DeleteKnowledgeFileHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+});
+
+export const DeleteKnowledgeFileParams = zod.object({
+  "fileId": zod.string()
+});
+
+/**
+ * Get platform owner analytics.
+ * @summary Get platform owner analytics
+ */
+export const GetPlatformAnalyticsHeader = zod.object({
+  "x-finos-platform-admin-email": zod.string().min(1)
+});
+
+export const GetPlatformAnalyticsResponse = zod.object({
+  "summary": zod.object({
+    "total_companies": zod.number(),
+    "subscribed_companies": zod.number(),
+    "basic_subscriptions": zod.number(),
+    "premium_subscriptions": zod.number(),
+    "monthly_expected_revenue_cents": zod.number(),
+    "active_companies": zod.number(),
+    "active_users": zod.number(),
+    "total_employees": zod.number(),
+    "total_knowledge_files": zod.number(),
+    "total_storage_bytes": zod.number(),
+    "total_ai_conversations": zod.number(),
+    "total_ai_requests": zod.number(),
+    "total_responses": zod.number(),
+    "companies_registered_last_30_days": zod.number()
+  }),
+  "companies": zod.array(
+    zod.object({
+      "id": zod.string(),
+      "name": zod.string(),
+      "registration_date": zod.string(),
+      "subscription_plan": zod.string(),
+      "subscription_status": zod.string(),
+      "monthly_price_cents": zod.number(),
+      "user_count": zod.number(),
+      "employee_count": zod.number(),
+      "ai_employee_count": zod.number(),
+      "knowledge_file_count": zod.number(),
+      "storage_bytes": zod.number(),
+      "last_activity": zod.string().nullable(),
+      "status": zod.string(),
+      "ai_conversations": zod.number(),
+      "ai_requests": zod.number(),
+      "responses": zod.number()
+    })
+  ),
+  "recent_activity": zod.array(
+    zod.object({
+      "id": zod.string(),
+      "organization_id": zod.string(),
+      "user_id": zod.string().nullable(),
+      "event_type": zod.string(),
+      "metadata": zod.record(zod.string(), zod.unknown()),
+      "created_at": zod.string()
+    })
+  )
+});
+
+/**
+ * Record a workspace activity event.
+ * @summary Record a workspace activity event
+ */
+export const RecordActivityEventHeader = zod.object({
+  "x-finos-organization-id": zod.string().min(1),
+  "x-finos-user-email": zod.string()
+});
+
+export const RecordActivityEventBody = zod.object({
+  "event_type": zod.string().min(1),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "usage_metric_type": zod.string().nullable().optional(),
+  "usage_value": zod.number().nullable().optional()
+});
+
+export const RecordActivityEventResponse = zod.void();
