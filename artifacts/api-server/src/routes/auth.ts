@@ -1,16 +1,13 @@
 import { Router, type IRouter } from "express";
-import {
-  createHash,
-  randomInt,
-} from "node:crypto";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { createHash, randomInt } from "node:crypto";
+import { eq, and, desc, isNull, sql } from "drizzle-orm";
 
 import {
   db,
   organizations,
   platformAdmins,
+  authSessions,
   users,
-  accountApplications,
   passwordResetTokens,
 } from "@workspace/db";
 
@@ -18,7 +15,6 @@ import {
   createAuthSession,
   getAuthenticatedUser,
   revokeAuthSession,
-  revokeAllUserSessions,
   AUTH_SESSION_COOKIE,
 } from "../lib/auth-session";
 
@@ -27,45 +23,46 @@ import {
   verifyPassword,
 } from "../lib/password-auth";
 
-const router: IRouter = Router();
-
-const COOKIE_MAX_AGE = 8 * 60 * 60 * 1000;
-
-/*
- * Password recovery security settings.
- *
- * OTP:
- * - 6 digits
- * - valid for 10 minutes
- * - maximum 5 verification attempts
- *
- * Request rate limit:
- * - maximum 3 reset requests per user
- * - during a rolling 15 minute window
- */
 const PASSWORD_RESET_OTP_TTL_MS =
   10 * 60 * 1000;
 
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 
-const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS =
-  15 * 60 * 1000;
+function hashResetOtp(otp: string): string {
+  return createHash("sha256")
+    .update(otp)
+    .digest("hex");
+}
 
-const PASSWORD_RESET_MAX_REQUESTS =
-  3;
+function generateResetOtp(): string {
+  return String(
+    randomInt(100000, 1000000),
+  );
+}
 
-/*
- * In production the OTP must be delivered by a
- * trusted communication channel.
- *
- * FINOS_PASSWORD_RESET_TEST_MODE=true may be used
- * temporarily during controlled testing.
- *
- * The OTP is NEVER stored in the database in plaintext.
- */
-const PASSWORD_RESET_TEST_MODE =
-  process.env.FINOS_PASSWORD_RESET_TEST_MODE ===
-  "true";
+async function ensurePasswordResetTable(): Promise<void> {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      otp_hash text NOT NULL,
+      expires_at timestamptz NOT NULL,
+      attempts integer NOT NULL DEFAULT 0,
+      used_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx
+    ON password_reset_tokens(user_id)
+  `);
+}
+
+const router: IRouter = Router();
+
+const COOKIE_MAX_AGE =
+  8 * 60 * 60 * 1000;
 
 const PLATFORM_OWNER_EMAIL =
   "seifdyago@gmail.com";
@@ -117,37 +114,12 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function normalizeVerificationValue(
-  value: string,
-): string {
-  return value
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
-
-function normalizePhone(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
 function hashLegacyPassword(
   password: string,
 ): string {
   return createHash("sha256")
     .update(password)
     .digest("hex");
-}
-
-function hashPasswordResetOtp(
-  otp: string,
-): string {
-  return createHash("sha256")
-    .update(otp)
-    .digest("hex");
-}
-
-function generatePasswordResetOtp(): string {
-  return randomInt(100000, 1000000).toString();
 }
 
 function isLegacyPlatformOwnerPassword(
@@ -167,7 +139,9 @@ function isBootstrapPassword(
 ): boolean {
   return (
     email === PLATFORM_OWNER_EMAIL &&
-    Boolean(PLATFORM_OWNER_BOOTSTRAP_PASSWORD) &&
+    Boolean(
+      PLATFORM_OWNER_BOOTSTRAP_PASSWORD,
+    ) &&
     password ===
       PLATFORM_OWNER_BOOTSTRAP_PASSWORD
   );
@@ -209,51 +183,215 @@ async function ensurePlatformOwner(
     salt: passwordSalt,
   } = hashPassword(password);
 
-  return db.transaction(async (transaction) => {
-    const existingOrganizations =
-      await transaction
-        .select()
-        .from(organizations)
-        .where(
-          eq(
-            organizations.id,
-            PLATFORM_ORGANIZATION_ID,
-          ),
-        )
-        .limit(1);
-
-    let organization =
-      existingOrganizations[0];
-
-    if (!organization) {
-      const createdOrganizations =
+  return db.transaction(
+    async (transaction) => {
+      const existingOrganizations =
         await transaction
-          .insert(organizations)
-          .values({
-            id: PLATFORM_ORGANIZATION_ID,
-            name: "FinOS Platform",
-            domain:
-              PLATFORM_ORGANIZATION_DOMAIN,
-            initials: "FN",
-            industry:
-              "Financial Technology",
-            companySize: "Platform",
-            status: "active",
-          })
-          .returning();
+          .select()
+          .from(organizations)
+          .where(
+            eq(
+              organizations.id,
+              PLATFORM_ORGANIZATION_ID,
+            ),
+          )
+          .limit(1);
 
-      organization =
-        createdOrganizations[0];
+      let organization =
+        existingOrganizations[0];
 
       if (!organization) {
-        throw new Error(
-          "Unable to create the FinOS platform organization.",
-        );
+        const createdOrganizations =
+          await transaction
+            .insert(organizations)
+            .values({
+              id: PLATFORM_ORGANIZATION_ID,
+              name: "FinOS Platform",
+              domain:
+                PLATFORM_ORGANIZATION_DOMAIN,
+              initials: "FN",
+              industry:
+                "Financial Technology",
+              companySize: "Platform",
+              status: "active",
+            })
+            .returning();
+
+        organization =
+          createdOrganizations[0];
+
+        if (!organization) {
+          throw new Error(
+            "Unable to create the FinOS platform organization.",
+          );
+        }
       }
+
+      const existingUsers =
+        await transaction
+          .select({
+            id: users.id,
+            organizationId:
+              users.organizationId,
+            email: users.email,
+            name: users.name,
+            role: users.role,
+            status: users.status,
+            passwordHash:
+              users.passwordHash,
+            passwordSalt:
+              users.passwordSalt,
+          })
+          .from(users)
+          .where(
+            eq(
+              users.email,
+              PLATFORM_OWNER_EMAIL,
+            ),
+          )
+          .limit(1);
+
+      let user = existingUsers[0];
+
+      if (!user) {
+        const createdUsers =
+          await transaction
+            .insert(users)
+            .values({
+              organizationId:
+                organization.id,
+              email:
+                PLATFORM_OWNER_EMAIL,
+              name: "Seifdyago",
+              role: "platform_owner",
+              passwordHash,
+              passwordSalt,
+              status: "active",
+            })
+            .returning({
+              id: users.id,
+              organizationId:
+                users.organizationId,
+              email: users.email,
+              name: users.name,
+              role: users.role,
+              status: users.status,
+              passwordHash:
+                users.passwordHash,
+              passwordSalt:
+                users.passwordSalt,
+            });
+
+        user = createdUsers[0];
+
+        if (!user) {
+          throw new Error(
+            "Unable to create the platform owner user.",
+          );
+        }
+      } else {
+        await transaction
+          .update(users)
+          .set({
+            organizationId:
+              organization.id,
+            name: "Seifdyago",
+            role: "platform_owner",
+            passwordHash,
+            passwordSalt,
+            status: "active",
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, user.id));
+
+        user = {
+          ...user,
+          organizationId:
+            organization.id,
+          name: "Seifdyago",
+          role: "platform_owner",
+          status: "active",
+          passwordHash,
+          passwordSalt,
+        };
+      }
+
+      const existingPlatformAdmins =
+        await transaction
+          .select()
+          .from(platformAdmins)
+          .where(
+            eq(
+              platformAdmins.userId,
+              user.email,
+            ),
+          )
+          .limit(1);
+
+      const existingPlatformAdmin =
+        existingPlatformAdmins[0];
+
+      if (!existingPlatformAdmin) {
+        await transaction
+          .insert(platformAdmins)
+          .values({
+            userId: user.email,
+            role: "owner",
+          });
+      } else if (
+        existingPlatformAdmin.role
+          .trim()
+          .toLowerCase() !== "owner"
+      ) {
+        await transaction
+          .update(platformAdmins)
+          .set({
+            role: "owner",
+          })
+          .where(
+            eq(
+              platformAdmins.id,
+              existingPlatformAdmin.id,
+            ),
+          );
+      }
+
+      return {
+        id: user.id,
+        organizationId:
+          organization.id,
+        email: user.email,
+        name: user.name,
+        role: "platform_owner",
+        status: "active",
+      };
+    },
+  );
+}
+
+router.post(
+  "/auth/login",
+  async (req, res): Promise<void> => {
+    const email =
+      typeof req.body?.email === "string"
+        ? normalizeEmail(req.body.email)
+        : "";
+
+    const password =
+      typeof req.body?.password === "string"
+        ? req.body.password
+        : "";
+
+    if (!email || !password) {
+      res.status(400).json({
+        error:
+          "Email and password are required.",
+      });
+      return;
     }
 
-    const existingUsers =
-      await transaction
+    try {
+      const rows = await db
         .select({
           id: users.id,
           organizationId:
@@ -268,301 +406,199 @@ async function ensurePlatformOwner(
             users.passwordSalt,
         })
         .from(users)
-        .where(
-          eq(
-            users.email,
-            PLATFORM_OWNER_EMAIL,
-          ),
-        )
+        .where(eq(users.email, email))
         .limit(1);
 
-    let user = existingUsers[0];
+      let user = rows[0];
 
-    if (!user) {
-      const createdUsers =
-        await transaction
-          .insert(users)
-          .values({
-            organizationId:
-              organization.id,
-            email:
-              PLATFORM_OWNER_EMAIL,
-            name: "Seifdyago",
-            role: "platform_owner",
-            passwordHash,
-            passwordSalt,
-            status: "active",
-          })
-          .returning({
-            id: users.id,
-            organizationId:
-              users.organizationId,
-            email: users.email,
-            name: users.name,
-            role: users.role,
-            status: users.status,
-            passwordHash:
-              users.passwordHash,
-            passwordSalt:
-              users.passwordSalt,
-          });
+      const passwordIsValid =
+        user?.passwordHash &&
+        user?.passwordSalt
+          ? verifyPassword(
+              password,
+              user.passwordHash,
+              user.passwordSalt,
+            )
+          : false;
 
-      user = createdUsers[0];
+      const shouldBootstrapOwner =
+        email ===
+          PLATFORM_OWNER_EMAIL &&
+        !passwordIsValid &&
+        (isBootstrapPassword(
+          email,
+          password,
+        ) ||
+          isLegacyPlatformOwnerPassword(
+            email,
+            password,
+          ));
+
+      if (shouldBootstrapOwner) {
+        user =
+          await ensurePlatformOwner(
+            password,
+          );
+      }
+
+      if (
+        !user ||
+        !user.passwordHash ||
+        !user.passwordSalt ||
+        !verifyPassword(
+          password,
+          user.passwordHash,
+          user.passwordSalt,
+        )
+      ) {
+        res.status(401).json({
+          error:
+            "Invalid email or password.",
+        });
+        return;
+      }
+
+      if (user.status !== "active") {
+        res.status(403).json({
+          error:
+            "Your account is not active yet. Security review is required before you can sign in.",
+          status: user.status,
+        });
+        return;
+      }
+
+      const {
+        token,
+        expiresAt,
+      } =
+        await createAuthSession(
+          user.id,
+        );
+
+      res.cookie(
+        AUTH_SESSION_COOKIE,
+        token,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            "production",
+          sameSite: "lax",
+          maxAge: COOKIE_MAX_AGE,
+          path: "/",
+        },
+      );
+
+      res.status(200).json({
+        user: {
+          id: user.id,
+          organization_id:
+            user.organizationId,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          status: user.status,
+        },
+        expires_at:
+          expiresAt.toISOString(),
+      });
+    } catch (error) {
+      req.log.error(
+        { error },
+        "Authentication login failed",
+      );
+
+      res.status(500).json({
+        error:
+          "Unable to sign in right now.",
+      });
+    }
+  },
+);
+
+router.get(
+  "/auth/session",
+  async (req, res): Promise<void> => {
+    try {
+      const token =
+        getSessionToken(req);
+
+      const user =
+        await getAuthenticatedUser(
+          token,
+        );
 
       if (!user) {
-        throw new Error(
-          "Unable to create the platform owner user.",
-        );
-      }
-    } else {
-      await transaction
-        .update(users)
-        .set({
-          organizationId:
-            organization.id,
-          name: "Seifdyago",
-          role: "platform_owner",
-          passwordHash,
-          passwordSalt,
-          status: "active",
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id));
-
-      user = {
-        ...user,
-        organizationId:
-          organization.id,
-        name: "Seifdyago",
-        role: "platform_owner",
-        status: "active",
-        passwordHash,
-        passwordSalt,
-      };
-    }
-
-    const existingPlatformAdmins =
-      await transaction
-        .select()
-        .from(platformAdmins)
-        .where(
-          eq(
-            platformAdmins.userId,
-            user.email,
-          ),
-        )
-        .limit(1);
-
-    const existingPlatformAdmin =
-      existingPlatformAdmins[0];
-
-    if (!existingPlatformAdmin) {
-      await transaction
-        .insert(platformAdmins)
-        .values({
-          userId: user.email,
-          role: "owner",
+        res.status(401).json({
+          authenticated: false,
         });
-    } else if (
-      existingPlatformAdmin.role
-        .trim()
-        .toLowerCase() !== "owner"
-    ) {
-      await transaction
-        .update(platformAdmins)
-        .set({
-          role: "owner",
-        })
-        .where(
-          eq(
-            platformAdmins.id,
-            existingPlatformAdmin.id,
-          ),
-        );
+        return;
+      }
+
+      res.status(200).json({
+        authenticated: true,
+        user: {
+          id: user.id,
+          organization_id:
+            user.organizationId,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          status: user.status,
+        },
+      });
+    } catch (error) {
+      req.log.error(
+        { error },
+        "Authentication session lookup failed",
+      );
+
+      res.status(500).json({
+        error:
+          "Unable to validate the current session.",
+      });
     }
-
-    return {
-      id: user.id,
-      organizationId: organization.id,
-      email: user.email,
-      name: user.name,
-      role: "platform_owner",
-      status: "active",
-    };
-  });
-}
-
-/*
- * Verify the additional identity information supplied
- * during password recovery.
- *
- * For normal company accounts:
- * - email must belong to the user
- * - an approved/verified application must exist
- * - if the application has a phone, it must match
- * - if an applicant name is supplied, it must match
- *
- * The platform owner is handled separately because the
- * platform owner is not created through company onboarding.
- */
-async function verifyPasswordResetIdentity(
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    role: string;
-    status: string;
   },
-  phone: string,
-  idName: string,
-): Promise<boolean> {
-  if (user.status !== "active") {
-    return false;
-  }
+);
 
-  if (user.email === PLATFORM_OWNER_EMAIL) {
-    return true;
-  }
+router.post(
+  "/auth/logout",
+  async (req, res): Promise<void> => {
+    try {
+      const token =
+        getSessionToken(req);
 
-  const applications =
-    await db
-      .select({
-        applicantName:
-          accountApplications.applicantName,
-        applicantEmail:
-          accountApplications.applicantEmail,
-        applicantPhone:
-          accountApplications.applicantPhone,
-        verificationStatus:
-          accountApplications.verificationStatus,
-      })
-      .from(accountApplications)
-      .where(
-        eq(
-          accountApplications.applicantEmail,
-          user.email,
-        ),
-      )
-      .orderBy(
-        desc(accountApplications.createdAt),
-      )
-      .limit(1);
+      await revokeAuthSession(token);
 
-  const application =
-    applications[0];
-
-  if (!application) {
-    return false;
-  }
-
-  const verificationStatus =
-    application.verificationStatus
-      .trim()
-      .toLowerCase();
-
-  const verified =
-    verificationStatus ===
-      "approved" ||
-    verificationStatus ===
-      "verified" ||
-    verificationStatus ===
-      "active";
-
-  if (!verified) {
-    return false;
-  }
-
-  const normalizedIdName =
-    normalizeVerificationValue(idName);
-
-  if (normalizedIdName) {
-    const userName =
-      normalizeVerificationValue(
-        user.name,
+      res.clearCookie(
+        AUTH_SESSION_COOKIE,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            "production",
+          sameSite: "lax",
+          path: "/",
+        },
       );
 
-    const applicantName =
-      normalizeVerificationValue(
-        application.applicantName,
+      res.status(200).json({
+        authenticated: false,
+      });
+    } catch (error) {
+      req.log.error(
+        { error },
+        "Authentication logout failed",
       );
 
-    if (
-      normalizedIdName !== userName &&
-      normalizedIdName !== applicantName
-    ) {
-      return false;
+      res.status(500).json({
+        error:
+          "Unable to sign out right now.",
+      });
     }
-  }
+  },
+);
 
-  const normalizedPhone =
-    normalizePhone(phone);
-
-  if (
-    normalizedPhone &&
-    application.applicantPhone
-  ) {
-    const applicationPhone =
-      normalizePhone(
-        application.applicantPhone,
-      );
-
-    if (
-      normalizedPhone !==
-      applicationPhone
-    ) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/*
- * Check the database-backed reset request rate limit.
- *
- * This avoids relying on in-memory state, which is not
- * reliable across Vercel/serverless instances.
- */
-async function isPasswordResetRateLimited(
-  userId: string,
-): Promise<boolean> {
-  const windowStart = new Date(
-    Date.now() -
-      PASSWORD_RESET_RATE_LIMIT_WINDOW_MS,
-  );
-
-  const recentRequests =
-    await db
-      .select({
-        id: passwordResetTokens.id,
-      })
-      .from(passwordResetTokens)
-      .where(
-        and(
-          eq(
-            passwordResetTokens.userId,
-            userId,
-          ),
-          gt(
-            passwordResetTokens.createdAt,
-            windowStart,
-          ),
-        ),
-      );
-
-  return (
-    recentRequests.length >=
-    PASSWORD_RESET_MAX_REQUESTS
-  );
-}
-
-/*
- * Request password reset OTP.
- *
- * IMPORTANT:
- * The response is intentionally generic so an attacker
- * cannot discover whether an email belongs to a FinOS user.
- */
 router.post(
   "/auth/password-reset/request",
   async (req, res): Promise<void> => {
@@ -571,35 +607,20 @@ router.post(
         ? normalizeEmail(req.body.email)
         : "";
 
-    const phone =
-      typeof req.body?.phone === "string"
-        ? req.body.phone.trim()
-        : "";
-
-    const idName =
-      typeof req.body?.idName === "string"
-        ? req.body.idName.trim()
-        : "";
-
-    const genericResponse = {
-      message:
-        "If the account information is valid, a verification code has been issued.",
-    };
-
     if (!email) {
-      res.status(200).json(
-        genericResponse,
-      );
+      res.status(400).json({
+        error: "Email is required.",
+      });
       return;
     }
 
     try {
+      await ensurePasswordResetTable();
+
       const rows = await db
         .select({
           id: users.id,
           email: users.email,
-          name: users.name,
-          role: users.role,
           status: users.status,
         })
         .from(users)
@@ -608,47 +629,20 @@ router.post(
 
       const user = rows[0];
 
-      if (!user) {
-        res.status(200).json(
-          genericResponse,
-        );
+      // Do not reveal whether an email exists.
+      if (
+        !user ||
+        user.status !== "active"
+      ) {
+        res.status(200).json({
+          accepted: true,
+          message:
+            "If the account is eligible, a verification code has been generated.",
+        });
         return;
       }
 
-      const identityValid =
-        await verifyPasswordResetIdentity(
-          user,
-          phone,
-          idName,
-        );
-
-      if (!identityValid) {
-        res.status(200).json(
-          genericResponse,
-        );
-        return;
-      }
-
-      const rateLimited =
-        await isPasswordResetRateLimited(
-          user.id,
-        );
-
-      if (rateLimited) {
-        /*
-         * Keep the same generic response to avoid
-         * leaking account information.
-         */
-        res.status(200).json(
-          genericResponse,
-        );
-        return;
-      }
-
-      /*
-       * Invalidate previous unused reset tokens
-       * before creating a new one.
-       */
+      // Invalidate previous unused reset codes.
       await db
         .update(passwordResetTokens)
         .set({
@@ -660,99 +654,76 @@ router.post(
               passwordResetTokens.userId,
               user.id,
             ),
-            eq(
+            isNull(
               passwordResetTokens.usedAt,
-              null,
             ),
           ),
         );
 
       const otp =
-        generatePasswordResetOtp();
-
-      const otpHash =
-        hashPasswordResetOtp(otp);
+        generateResetOtp();
 
       const expiresAt = new Date(
         Date.now() +
           PASSWORD_RESET_OTP_TTL_MS,
       );
 
-      const created =
-        await db
-          .insert(passwordResetTokens)
-          .values({
-            userId: user.id,
-            otpHash,
-            expiresAt,
-            attempts: 0,
-          })
-          .returning({
-            id: passwordResetTokens.id,
-          });
-
-      const resetToken =
-        created[0];
-
-      if (!resetToken) {
-        throw new Error(
-          "Unable to create password reset token.",
-        );
-      }
+      await db
+        .insert(passwordResetTokens)
+        .values({
+          userId: user.id,
+          otpHash:
+            hashResetOtp(otp),
+          expiresAt,
+          attempts: 0,
+        });
 
       /*
-       * The actual delivery integration will be connected
-       * to SMS/email later.
+       * Temporary launch-testing delivery.
        *
-       * Test mode is explicitly opt-in through an environment
-       * variable and returns the OTP only for controlled testing.
+       * The OTP is written to the server log,
+       * never returned to the browser.
+       *
+       * Later this log delivery is replaced
+       * by the real SMS/email provider.
        */
-      if (PASSWORD_RESET_TEST_MODE) {
-        res.status(200).json({
-          ...genericResponse,
-          reset_token_id:
-            resetToken.id,
-          test_otp: otp,
-          expires_at:
+      req.log.info(
+        {
+          event:
+            "password_reset_otp_generated",
+          email: user.email,
+          expiresAt:
             expiresAt.toISOString(),
-        });
-        return;
-      }
-
-      res.status(200).json(
-        genericResponse,
+          otp,
+        },
+        "Password reset OTP generated for launch testing",
       );
+
+      res.status(200).json({
+        accepted: true,
+        message:
+          "If the account is eligible, a verification code has been generated.",
+      });
     } catch (error) {
       req.log.error(
         { error },
         "Password reset request failed",
       );
 
-      /*
-       * Do not expose internal database/authentication
-       * details to the client.
-       */
-      res.status(200).json(
-        genericResponse,
-      );
+      res.status(500).json({
+        error:
+          "Unable to start password reset right now.",
+      });
     }
   },
 );
 
-/*
- * Verify OTP and set a new password.
- *
- * The reset token ID is not itself considered a secret.
- * The OTP hash, expiry, attempt count, and used state
- * are all enforced server-side.
- */
 router.post(
   "/auth/password-reset/complete",
   async (req, res): Promise<void> => {
-    const resetTokenId =
-      typeof req.body?.resetTokenId ===
-      "string"
-        ? req.body.resetTokenId.trim()
+    const email =
+      typeof req.body?.email === "string"
+        ? normalizeEmail(req.body.email)
         : "";
 
     const otp =
@@ -760,5 +731,245 @@ router.post(
         ? req.body.otp.trim()
         : "";
 
+    /*
+     * IMPORTANT:
+     * This is the new password that will be
+     * hashed server-side and stored in users.
+     */
     const newPassword =
-      typeof req.body?.
+      typeof req.body?.newPassword ===
+      "string"
+        ? req.body.newPassword
+        : "";
+
+    if (
+      !email ||
+      !/^\d{6}$/.test(otp)
+    ) {
+      res.status(400).json({
+        error:
+          "Email and a valid 6-digit verification code are required.",
+      });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      res.status(400).json({
+        error:
+          "New password must be at least 8 characters.",
+      });
+      return;
+    }
+
+    try {
+      await ensurePasswordResetTable();
+
+      const userRows = await db
+        .select({
+          id: users.id,
+          status: users.status,
+        })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      const user = userRows[0];
+
+      if (
+        !user ||
+        user.status !== "active"
+      ) {
+        res.status(400).json({
+          error:
+            "The verification code is invalid or expired.",
+        });
+        return;
+      }
+
+      const tokenRows =
+        await db
+          .select()
+          .from(passwordResetTokens)
+          .where(
+            and(
+              eq(
+                passwordResetTokens.userId,
+                user.id,
+              ),
+              isNull(
+                passwordResetTokens.usedAt,
+              ),
+            ),
+          )
+          .orderBy(
+            desc(
+              passwordResetTokens.createdAt,
+            ),
+          )
+          .limit(1);
+
+      const token = tokenRows[0];
+
+      if (!token) {
+        res.status(400).json({
+          error:
+            "The verification code is invalid or expired.",
+        });
+        return;
+      }
+
+      if (
+        token.expiresAt.getTime() <=
+        Date.now()
+      ) {
+        await db
+          .update(passwordResetTokens)
+          .set({
+            usedAt: new Date(),
+          })
+          .where(
+            eq(
+              passwordResetTokens.id,
+              token.id,
+            ),
+          );
+
+        res.status(400).json({
+          error:
+            "The verification code is invalid or expired.",
+        });
+        return;
+      }
+
+      if (
+        token.attempts >=
+        PASSWORD_RESET_MAX_ATTEMPTS
+      ) {
+        await db
+          .update(passwordResetTokens)
+          .set({
+            usedAt: new Date(),
+          })
+          .where(
+            eq(
+              passwordResetTokens.id,
+              token.id,
+            ),
+          );
+
+        res.status(429).json({
+          error:
+            "Too many verification attempts. Request a new code.",
+        });
+        return;
+      }
+
+      const otpIsValid =
+        hashResetOtp(otp) ===
+        token.otpHash;
+
+      if (!otpIsValid) {
+        await db
+          .update(passwordResetTokens)
+          .set({
+            attempts:
+              token.attempts + 1,
+          })
+          .where(
+            eq(
+              passwordResetTokens.id,
+              token.id,
+            ),
+          );
+
+        res.status(400).json({
+          error:
+            "The verification code is invalid or expired.",
+        });
+        return;
+      }
+
+      /*
+       * IMPORTANT PASSWORD STEP:
+       *
+       * The raw password is NEVER stored.
+       * hashPassword() creates a new salt and
+       * derives a secure password hash.
+       */
+      const {
+        hash: passwordHash,
+        salt: passwordSalt,
+      } = hashPassword(
+        newPassword,
+      );
+
+      await db.transaction(
+        async (transaction) => {
+          /*
+           * Save the new password hash + salt.
+           */
+          await transaction
+            .update(users)
+            .set({
+              passwordHash,
+              passwordSalt,
+              updatedAt: new Date(),
+            })
+            .where(
+              eq(
+                users.id,
+                user.id,
+              ),
+            );
+
+          /*
+           * Password change invalidates
+           * every previous login session.
+           */
+          await transaction
+            .delete(authSessions)
+            .where(
+              eq(
+                authSessions.userId,
+                user.id,
+              ),
+            );
+
+          /*
+           * Make this reset token
+           * permanently unusable.
+           */
+          await transaction
+            .update(passwordResetTokens)
+            .set({
+              usedAt: new Date(),
+            })
+            .where(
+              eq(
+                passwordResetTokens.id,
+                token.id,
+              ),
+            );
+        },
+      );
+
+      res.status(200).json({
+        reset: true,
+        message:
+          "Password reset successfully. Please sign in again.",
+      });
+    } catch (error) {
+      req.log.error(
+        { error },
+        "Password reset completion failed",
+      );
+
+      res.status(500).json({
+        error:
+          "Unable to reset the password right now.",
+      });
+    }
+  },
+);
+
+export default router;
