@@ -24,6 +24,10 @@ export const createCompanyOnboardingBodyNameMin = 2;
 export const CreateCompanyOnboardingBody = zod.object({
   "name": zod.string().min(createCompanyOnboardingBodyNameMin),
   "email": zod.string().email().describe('Work email address'),
+  "phone": zod.string().min(1),
+  "idNumber": zod.string().min(1),
+  "documentReference": zod.string().min(1),
+  "documentType": zod.string().min(1),
   "password": zod.string().min(8).describe('Account password. The server stores only a secure password hash.'),
   "industry": zod.string().min(1),
   "company_size": zod.string().min(1),
@@ -231,5 +235,3 @@ export const RecordActivityEventBody = zod.object({
   "usage_metric_type": zod.string().nullable().optional(),
   "usage_value": zod.number().nullable().optional()
 });
-
-export const RecordActivityEventResponse = zod.void();
