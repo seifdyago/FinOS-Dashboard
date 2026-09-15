@@ -1,18 +1,24 @@
 import { Router, type IRouter } from "express";
-import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import {
+  createHash,
+  randomInt,
+} from "node:crypto";
+import { and, desc, eq, gt } from "drizzle-orm";
 
 import {
   db,
   organizations,
   platformAdmins,
   users,
+  accountApplications,
+  passwordResetTokens,
 } from "@workspace/db";
 
 import {
   createAuthSession,
   getAuthenticatedUser,
   revokeAuthSession,
+  revokeAllUserSessions,
   AUTH_SESSION_COOKIE,
 } from "../lib/auth-session";
 
@@ -25,7 +31,44 @@ const router: IRouter = Router();
 
 const COOKIE_MAX_AGE = 8 * 60 * 60 * 1000;
 
-const PLATFORM_OWNER_EMAIL = "seifdyago@gmail.com";
+/*
+ * Password recovery security settings.
+ *
+ * OTP:
+ * - 6 digits
+ * - valid for 10 minutes
+ * - maximum 5 verification attempts
+ *
+ * Request rate limit:
+ * - maximum 3 reset requests per user
+ * - during a rolling 15 minute window
+ */
+const PASSWORD_RESET_OTP_TTL_MS =
+  10 * 60 * 1000;
+
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS =
+  15 * 60 * 1000;
+
+const PASSWORD_RESET_MAX_REQUESTS =
+  3;
+
+/*
+ * In production the OTP must be delivered by a
+ * trusted communication channel.
+ *
+ * FINOS_PASSWORD_RESET_TEST_MODE=true may be used
+ * temporarily during controlled testing.
+ *
+ * The OTP is NEVER stored in the database in plaintext.
+ */
+const PASSWORD_RESET_TEST_MODE =
+  process.env.FINOS_PASSWORD_RESET_TEST_MODE ===
+  "true";
+
+const PLATFORM_OWNER_EMAIL =
+  "seifdyago@gmail.com";
 
 const PLATFORM_OWNER_BOOTSTRAP_PASSWORD =
   process.env.FINOS_OWNER_BOOTSTRAP_PASSWORD;
@@ -33,7 +76,8 @@ const PLATFORM_OWNER_BOOTSTRAP_PASSWORD =
 const PLATFORM_OWNER_LEGACY_SHA256 =
   "f5c300c99642e85eb995fda3f0bf88cf9002b16656344619ae4dba167750cc7e";
 
-const PLATFORM_ORGANIZATION_ID = "finos-platform";
+const PLATFORM_ORGANIZATION_ID =
+  "finos-platform";
 
 const PLATFORM_ORGANIZATION_DOMAIN =
   "platform.finos.local";
@@ -53,7 +97,9 @@ function getSessionToken(req: {
     .split(";")
     .map((part) => part.trim())
     .find((part) =>
-      part.startsWith(`${AUTH_SESSION_COOKIE}=`),
+      part.startsWith(
+        `${AUTH_SESSION_COOKIE}=`,
+      ),
     );
 
   if (!cookie) {
@@ -61,7 +107,9 @@ function getSessionToken(req: {
   }
 
   return decodeURIComponent(
-    cookie.slice(`${AUTH_SESSION_COOKIE}=`.length),
+    cookie.slice(
+      `${AUTH_SESSION_COOKIE}=`.length,
+    ),
   );
 }
 
@@ -69,10 +117,37 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function hashLegacyPassword(password: string): string {
+function normalizeVerificationValue(
+  value: string,
+): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function normalizePhone(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function hashLegacyPassword(
+  password: string,
+): string {
   return createHash("sha256")
     .update(password)
     .digest("hex");
+}
+
+function hashPasswordResetOtp(
+  otp: string,
+): string {
+  return createHash("sha256")
+    .update(otp)
+    .digest("hex");
+}
+
+function generatePasswordResetOtp(): string {
+  return randomInt(100000, 1000000).toString();
 }
 
 function isLegacyPlatformOwnerPassword(
@@ -93,7 +168,8 @@ function isBootstrapPassword(
   return (
     email === PLATFORM_OWNER_EMAIL &&
     Boolean(PLATFORM_OWNER_BOOTSTRAP_PASSWORD) &&
-    password === PLATFORM_OWNER_BOOTSTRAP_PASSWORD
+    password ===
+      PLATFORM_OWNER_BOOTSTRAP_PASSWORD
   );
 }
 
@@ -119,7 +195,10 @@ async function ensurePlatformOwner(
       password,
     );
 
-  if (!validBootstrapPassword && !validLegacyPassword) {
+  if (
+    !validBootstrapPassword &&
+    !validLegacyPassword
+  ) {
     throw new Error(
       "Platform owner bootstrap password verification failed.",
     );
@@ -153,15 +232,18 @@ async function ensurePlatformOwner(
           .values({
             id: PLATFORM_ORGANIZATION_ID,
             name: "FinOS Platform",
-            domain: PLATFORM_ORGANIZATION_DOMAIN,
+            domain:
+              PLATFORM_ORGANIZATION_DOMAIN,
             initials: "FN",
-            industry: "Financial Technology",
+            industry:
+              "Financial Technology",
             companySize: "Platform",
             status: "active",
           })
           .returning();
 
-      organization = createdOrganizations[0];
+      organization =
+        createdOrganizations[0];
 
       if (!organization) {
         throw new Error(
@@ -174,13 +256,16 @@ async function ensurePlatformOwner(
       await transaction
         .select({
           id: users.id,
-          organizationId: users.organizationId,
+          organizationId:
+            users.organizationId,
           email: users.email,
           name: users.name,
           role: users.role,
           status: users.status,
-          passwordHash: users.passwordHash,
-          passwordSalt: users.passwordSalt,
+          passwordHash:
+            users.passwordHash,
+          passwordSalt:
+            users.passwordSalt,
         })
         .from(users)
         .where(
@@ -198,8 +283,10 @@ async function ensurePlatformOwner(
         await transaction
           .insert(users)
           .values({
-            organizationId: organization.id,
-            email: PLATFORM_OWNER_EMAIL,
+            organizationId:
+              organization.id,
+            email:
+              PLATFORM_OWNER_EMAIL,
             name: "Seifdyago",
             role: "platform_owner",
             passwordHash,
@@ -208,13 +295,16 @@ async function ensurePlatformOwner(
           })
           .returning({
             id: users.id,
-            organizationId: users.organizationId,
+            organizationId:
+              users.organizationId,
             email: users.email,
             name: users.name,
             role: users.role,
             status: users.status,
-            passwordHash: users.passwordHash,
-            passwordSalt: users.passwordSalt,
+            passwordHash:
+              users.passwordHash,
+            passwordSalt:
+              users.passwordSalt,
           });
 
       user = createdUsers[0];
@@ -228,7 +318,8 @@ async function ensurePlatformOwner(
       await transaction
         .update(users)
         .set({
-          organizationId: organization.id,
+          organizationId:
+            organization.id,
           name: "Seifdyago",
           role: "platform_owner",
           passwordHash,
@@ -240,7 +331,8 @@ async function ensurePlatformOwner(
 
       user = {
         ...user,
-        organizationId: organization.id,
+        organizationId:
+          organization.id,
         name: "Seifdyago",
         role: "platform_owner",
         status: "active",
@@ -300,23 +392,204 @@ async function ensurePlatformOwner(
   });
 }
 
+/*
+ * Verify the additional identity information supplied
+ * during password recovery.
+ *
+ * For normal company accounts:
+ * - email must belong to the user
+ * - an approved/verified application must exist
+ * - if the application has a phone, it must match
+ * - if an applicant name is supplied, it must match
+ *
+ * The platform owner is handled separately because the
+ * platform owner is not created through company onboarding.
+ */
+async function verifyPasswordResetIdentity(
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    status: string;
+  },
+  phone: string,
+  idName: string,
+): Promise<boolean> {
+  if (user.status !== "active") {
+    return false;
+  }
+
+  if (user.email === PLATFORM_OWNER_EMAIL) {
+    return true;
+  }
+
+  const applications =
+    await db
+      .select({
+        applicantName:
+          accountApplications.applicantName,
+        applicantEmail:
+          accountApplications.applicantEmail,
+        applicantPhone:
+          accountApplications.applicantPhone,
+        verificationStatus:
+          accountApplications.verificationStatus,
+      })
+      .from(accountApplications)
+      .where(
+        eq(
+          accountApplications.applicantEmail,
+          user.email,
+        ),
+      )
+      .orderBy(
+        desc(accountApplications.createdAt),
+      )
+      .limit(1);
+
+  const application =
+    applications[0];
+
+  if (!application) {
+    return false;
+  }
+
+  const verificationStatus =
+    application.verificationStatus
+      .trim()
+      .toLowerCase();
+
+  const verified =
+    verificationStatus ===
+      "approved" ||
+    verificationStatus ===
+      "verified" ||
+    verificationStatus ===
+      "active";
+
+  if (!verified) {
+    return false;
+  }
+
+  const normalizedIdName =
+    normalizeVerificationValue(idName);
+
+  if (normalizedIdName) {
+    const userName =
+      normalizeVerificationValue(
+        user.name,
+      );
+
+    const applicantName =
+      normalizeVerificationValue(
+        application.applicantName,
+      );
+
+    if (
+      normalizedIdName !== userName &&
+      normalizedIdName !== applicantName
+    ) {
+      return false;
+    }
+  }
+
+  const normalizedPhone =
+    normalizePhone(phone);
+
+  if (
+    normalizedPhone &&
+    application.applicantPhone
+  ) {
+    const applicationPhone =
+      normalizePhone(
+        application.applicantPhone,
+      );
+
+    if (
+      normalizedPhone !==
+      applicationPhone
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/*
+ * Check the database-backed reset request rate limit.
+ *
+ * This avoids relying on in-memory state, which is not
+ * reliable across Vercel/serverless instances.
+ */
+async function isPasswordResetRateLimited(
+  userId: string,
+): Promise<boolean> {
+  const windowStart = new Date(
+    Date.now() -
+      PASSWORD_RESET_RATE_LIMIT_WINDOW_MS,
+  );
+
+  const recentRequests =
+    await db
+      .select({
+        id: passwordResetTokens.id,
+      })
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(
+            passwordResetTokens.userId,
+            userId,
+          ),
+          gt(
+            passwordResetTokens.createdAt,
+            windowStart,
+          ),
+        ),
+      );
+
+  return (
+    recentRequests.length >=
+    PASSWORD_RESET_MAX_REQUESTS
+  );
+}
+
+/*
+ * Request password reset OTP.
+ *
+ * IMPORTANT:
+ * The response is intentionally generic so an attacker
+ * cannot discover whether an email belongs to a FinOS user.
+ */
 router.post(
-  "/auth/login",
+  "/auth/password-reset/request",
   async (req, res): Promise<void> => {
     const email =
       typeof req.body?.email === "string"
         ? normalizeEmail(req.body.email)
         : "";
 
-    const password =
-      typeof req.body?.password === "string"
-        ? req.body.password
+    const phone =
+      typeof req.body?.phone === "string"
+        ? req.body.phone.trim()
         : "";
 
-    if (!email || !password) {
-      res.status(400).json({
-        error: "Email and password are required.",
-      });
+    const idName =
+      typeof req.body?.idName === "string"
+        ? req.body.idName.trim()
+        : "";
+
+    const genericResponse = {
+      message:
+        "If the account information is valid, a verification code has been issued.",
+    };
+
+    if (!email) {
+      res.status(200).json(
+        genericResponse,
+      );
       return;
     }
 
@@ -324,190 +597,168 @@ router.post(
       const rows = await db
         .select({
           id: users.id,
-          organizationId: users.organizationId,
           email: users.email,
           name: users.name,
           role: users.role,
           status: users.status,
-          passwordHash: users.passwordHash,
-          passwordSalt: users.passwordSalt,
         })
         .from(users)
         .where(eq(users.email, email))
         .limit(1);
 
-      let user = rows[0];
-
-      const passwordIsValid =
-        user?.passwordHash &&
-        user?.passwordSalt
-          ? verifyPassword(
-              password,
-              user.passwordHash,
-              user.passwordSalt,
-            )
-          : false;
-
-      const shouldBootstrapOwner =
-        email === PLATFORM_OWNER_EMAIL &&
-        !passwordIsValid &&
-        (isBootstrapPassword(email, password) ||
-          isLegacyPlatformOwnerPassword(
-            email,
-            password,
-          ));
-
-      if (shouldBootstrapOwner) {
-        user = await ensurePlatformOwner(password);
-      }
-
-      if (
-        !user ||
-        !user.passwordHash ||
-        !user.passwordSalt ||
-        !verifyPassword(
-          password,
-          user.passwordHash,
-          user.passwordSalt,
-        )
-      ) {
-        res.status(401).json({
-          error: "Invalid email or password.",
-        });
-        return;
-      }
-
-      if (user.status !== "active") {
-        res.status(403).json({
-          error:
-            "Your account is not active yet. Security review is required before you can sign in.",
-          status: user.status,
-        });
-        return;
-      }
-
-      const {
-        token,
-        expiresAt,
-      } = await createAuthSession(user.id);
-
-      res.cookie(
-        AUTH_SESSION_COOKIE,
-        token,
-        {
-          httpOnly: true,
-          secure:
-            process.env.NODE_ENV ===
-            "production",
-          sameSite: "lax",
-          maxAge: COOKIE_MAX_AGE,
-          path: "/",
-        },
-      );
-
-      res.status(200).json({
-        user: {
-          id: user.id,
-          organization_id:
-            user.organizationId,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          status: user.status,
-        },
-        expires_at:
-          expiresAt.toISOString(),
-      });
-    } catch (error) {
-      req.log.error(
-        { error },
-        "Authentication login failed",
-      );
-
-      res.status(500).json({
-        error: "Unable to sign in right now.",
-      });
-    }
-  },
-);
-
-router.get(
-  "/auth/session",
-  async (req, res): Promise<void> => {
-    try {
-      const token = getSessionToken(req);
-
-      const user =
-        await getAuthenticatedUser(token);
+      const user = rows[0];
 
       if (!user) {
-        res.status(401).json({
-          authenticated: false,
+        res.status(200).json(
+          genericResponse,
+        );
+        return;
+      }
+
+      const identityValid =
+        await verifyPasswordResetIdentity(
+          user,
+          phone,
+          idName,
+        );
+
+      if (!identityValid) {
+        res.status(200).json(
+          genericResponse,
+        );
+        return;
+      }
+
+      const rateLimited =
+        await isPasswordResetRateLimited(
+          user.id,
+        );
+
+      if (rateLimited) {
+        /*
+         * Keep the same generic response to avoid
+         * leaking account information.
+         */
+        res.status(200).json(
+          genericResponse,
+        );
+        return;
+      }
+
+      /*
+       * Invalidate previous unused reset tokens
+       * before creating a new one.
+       */
+      await db
+        .update(passwordResetTokens)
+        .set({
+          usedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(
+              passwordResetTokens.userId,
+              user.id,
+            ),
+            eq(
+              passwordResetTokens.usedAt,
+              null,
+            ),
+          ),
+        );
+
+      const otp =
+        generatePasswordResetOtp();
+
+      const otpHash =
+        hashPasswordResetOtp(otp);
+
+      const expiresAt = new Date(
+        Date.now() +
+          PASSWORD_RESET_OTP_TTL_MS,
+      );
+
+      const created =
+        await db
+          .insert(passwordResetTokens)
+          .values({
+            userId: user.id,
+            otpHash,
+            expiresAt,
+            attempts: 0,
+          })
+          .returning({
+            id: passwordResetTokens.id,
+          });
+
+      const resetToken =
+        created[0];
+
+      if (!resetToken) {
+        throw new Error(
+          "Unable to create password reset token.",
+        );
+      }
+
+      /*
+       * The actual delivery integration will be connected
+       * to SMS/email later.
+       *
+       * Test mode is explicitly opt-in through an environment
+       * variable and returns the OTP only for controlled testing.
+       */
+      if (PASSWORD_RESET_TEST_MODE) {
+        res.status(200).json({
+          ...genericResponse,
+          reset_token_id:
+            resetToken.id,
+          test_otp: otp,
+          expires_at:
+            expiresAt.toISOString(),
         });
         return;
       }
 
-      res.status(200).json({
-        authenticated: true,
-        user: {
-          id: user.id,
-          organization_id:
-            user.organizationId,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          status: user.status,
-        },
-      });
+      res.status(200).json(
+        genericResponse,
+      );
     } catch (error) {
       req.log.error(
         { error },
-        "Authentication session lookup failed",
+        "Password reset request failed",
       );
 
-      res.status(500).json({
-        error:
-          "Unable to validate the current session.",
-      });
+      /*
+       * Do not expose internal database/authentication
+       * details to the client.
+       */
+      res.status(200).json(
+        genericResponse,
+      );
     }
   },
 );
 
+/*
+ * Verify OTP and set a new password.
+ *
+ * The reset token ID is not itself considered a secret.
+ * The OTP hash, expiry, attempt count, and used state
+ * are all enforced server-side.
+ */
 router.post(
-  "/auth/logout",
+  "/auth/password-reset/complete",
   async (req, res): Promise<void> => {
-    try {
-      const token = getSessionToken(req);
+    const resetTokenId =
+      typeof req.body?.resetTokenId ===
+      "string"
+        ? req.body.resetTokenId.trim()
+        : "";
 
-      await revokeAuthSession(token);
+    const otp =
+      typeof req.body?.otp === "string"
+        ? req.body.otp.trim()
+        : "";
 
-      res.clearCookie(
-        AUTH_SESSION_COOKIE,
-        {
-          httpOnly: true,
-          secure:
-            process.env.NODE_ENV ===
-            "production",
-          sameSite: "lax",
-          path: "/",
-        },
-      );
-
-      res.status(200).json({
-        authenticated: false,
-      });
-    } catch (error) {
-      req.log.error(
-        { error },
-        "Authentication logout failed",
-      );
-
-      res.status(500).json({
-        error:
-          "Unable to sign out right now.",
-      });
-    }
-  },
-);
-
-export default router;
+    const newPassword =
+      typeof req.body?.
