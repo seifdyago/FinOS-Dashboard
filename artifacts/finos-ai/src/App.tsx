@@ -1363,9 +1363,21 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
   const requestPasswordReset = async () => {
     const normalizedResetEmail = normalizeEmail(resetEmail);
+    const normalizedResetPhone = resetPhone.trim().replace(/[^\d+]/g, '');
+    const normalizedResetDocument = resetIdName.trim();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedResetEmail)) {
       setError('Enter the email address registered with your FinOS account.');
+      return;
+    }
+
+    if (!/^\+?\d{8,15}$/.test(normalizedResetPhone)) {
+      setError('Enter the phone number used when the account was registered.');
+      return;
+    }
+
+    if (!normalizedResetDocument) {
+      setError('Enter the ID/document filename used during registration.');
       return;
     }
 
@@ -1382,17 +1394,21 @@ function Login({ onLogin }: { onLogin: () => void }) {
         },
         body: JSON.stringify({
           email: normalizedResetEmail,
+          phone: normalizedResetPhone,
+          documentReference: normalizedResetDocument,
         }),
       });
 
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(typeof payload?.error === 'string' ? payload.error : 'Unable to start password recovery. Please try again.');
+        setError(typeof payload?.error === 'string' ? payload.error : 'Unable to start password recovery. Please verify your account details.');
         return;
       }
 
       setResetEmail(normalizedResetEmail);
+      setResetPhone(normalizedResetPhone);
+      setResetIdName(normalizedResetDocument);
       setResetOtp(typeof payload?.test_otp === 'string' ? payload.test_otp : '');
       setResetStep(2);
 
@@ -1431,7 +1447,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/password-reset/complete', {
+      const verifyResponse = await fetch('/api/auth/password-reset/verify', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1441,6 +1457,35 @@ function Login({ onLogin }: { onLogin: () => void }) {
         body: JSON.stringify({
           email: normalizedResetEmail,
           otp,
+        }),
+      });
+
+      const verifyPayload = await verifyResponse.json().catch(() => ({}));
+
+      if (!verifyResponse.ok) {
+        setError(typeof verifyPayload?.error === 'string' ? verifyPayload.error : 'The verification code is invalid or expired. Please request a new code.');
+        return;
+      }
+
+      const resetToken = typeof verifyPayload?.reset_token === 'string'
+        ? verifyPayload.reset_token
+        : '';
+
+      if (!resetToken) {
+        setError('The verification server did not return a valid reset authorization. Please request a new code.');
+        return;
+      }
+
+      const response = await fetch('/api/auth/password-reset/complete', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          email: normalizedResetEmail,
+          resetToken,
           newPassword: resetNewPassword,
         }),
       });
@@ -1448,13 +1493,15 @@ function Login({ onLogin }: { onLogin: () => void }) {
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(typeof payload?.error === 'string' ? payload.error : 'The verification code is invalid or expired. Please request a new code.');
+        setError(typeof payload?.error === 'string' ? payload.error : 'Unable to complete the password reset. Please request a new code.');
         return;
       }
 
       setPassword('');
       setResetOtp('');
       setResetNewPassword('');
+      setResetPhone('');
+      setResetIdName('');
       setResetStep(1);
       setForgotOpen(false);
       setError('');
@@ -1465,7 +1512,9 @@ function Login({ onLogin }: { onLogin: () => void }) {
     } finally {
       setLoading(false);
     }
-  };  const fieldClass = 'input-dark h-11 w-full rounded-lg px-3 text-sm';
+  };
+
+  const fieldClass = 'input-dark h-11 w-full rounded-lg px-3 text-sm';
   const onboardingPanel = (
     <>
       <div className="mb-7 flex items-center justify-between">
@@ -1510,7 +1559,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
           <label className="block"><span className="kicker mb-2 block">Email</span><input value={resetEmail} onChange={e=>setResetEmail(e.target.value)} type="email" className={fieldClass} placeholder="you@company.com"/></label>
           <label className="block"><span className="kicker mb-2 block">Registered phone</span><input value={resetPhone} onChange={e=>setResetPhone(e.target.value)} type="tel" className={fieldClass} placeholder="+20 100 000 0000" autoComplete="tel"/></label>
           <label className="block"><span className="kicker mb-2 block">ID/document filename</span><input value={resetIdName} onChange={e=>setResetIdName(e.target.value)} className={fieldClass} placeholder="The document used at registration" autoComplete="off"/></label>
-          <p className="text-[10px] leading-5 text-[#71899d]">Your verification code is created and checked by the secure authentication backend. Never generate or verify the OTP in the browser.</p>
+          <p className="text-[10px] leading-5 text-[#71899d]">Your email, registered phone, and document reference are checked against the server-side registration record. The OTP is created and verified only by the authentication backend.</p>
           <button onClick={() => void requestPasswordReset()} disabled={loading} className="btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm disabled:opacity-60">{loading ? <Loader2 size={15} className="animate-spin"/> : <Phone size={15}/>} {loading ? 'Sending code...' : 'Verify account'}</button>
         </div> : <div className="space-y-4">
           <label className="block"><span className="kicker mb-2 block">Verification code</span><input value={resetOtp} onChange={e=>setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className={fieldClass} placeholder="123456"/></label>
