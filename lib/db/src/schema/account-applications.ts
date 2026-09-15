@@ -9,6 +9,10 @@ export const accountApplications = pgTable("account_applications", {
   applicantEmail: text("applicant_email").notNull(),
   applicantPhone: text("applicant_phone"),
 
+  // Store only a SHA-256 hash of the national ID number.
+  // Never persist the raw national ID number.
+  idNumberHash: text("id_number_hash"),
+
   companyName: text("company_name").notNull(),
   companyDomain: text("company_domain"),
   industry: text("industry"),
