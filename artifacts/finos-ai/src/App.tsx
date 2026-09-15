@@ -50,42 +50,7 @@ type BackendSessionResponse = {
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
-  
 }
-const normalizedEmail = normalizeEmail(email);
-
-const response = await fetch('/api/auth/login', {
-  method: 'POST',
-  credentials: 'include',
-  headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  },
-  body: JSON.stringify({
-    email: normalizedEmail,
-    password,
-  }),
-});
-
-const payload = await response.json().catch(() => ({}));
-
-if (!response.ok) {
-  setError(
-    typeof payload?.error === 'string'
-      ? payload.error
-      : 'Email or password is incorrect.'
-  );
-  return;
-}
-
-const user = payload?.user;
-
-if (!user) {
-  setError('Authentication server returned an invalid response.');
-  return;
-}
-
-finishLogin(user);
 
 function isPlatformOwner(email: string): boolean {
   return normalizeEmail(email) === PLATFORM_OWNER_EMAIL;
