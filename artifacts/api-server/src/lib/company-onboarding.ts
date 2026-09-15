@@ -8,7 +8,7 @@ import {
   type User,
 } from "@workspace/db";
 import { CreateCompanyOnboardingBody } from "@workspace/api-zod";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { hashPassword } from "./password-auth";
 
@@ -26,6 +26,10 @@ export type CompanyOnboardingInput = {
   industry: string;
   company_size: string;
   subscription: "basic" | "premium";
+  phone: string;
+  idNumber: string;
+  documentReference: string;
+  documentType: string;
 };
 
 export type CompanyOnboardingResult = {
@@ -89,27 +93,6 @@ function getSubscriptionPriceCents(
     : 100_000;
 }
 
-function isUniqueViolation(
-  error: unknown,
-): boolean {
-  if (
-    typeof error !== "object" ||
-    error === null
-  ) {
-    return false;
-  }
-
-  const candidate = error as {
-    code?: unknown;
-    cause?: unknown;
-  };
-
-  return (
-    candidate.code === "23505" ||
-    isUniqueViolation(candidate.cause)
-  );
-}
-
 export async function createCompanyOnboarding(
   input: CompanyOnboardingInput,
 ): Promise<CompanyOnboardingResult> {
@@ -124,6 +107,10 @@ export async function createCompanyOnboarding(
     parsed.company_size.trim();
   const subscription =
     parsed.subscription;
+  const phone = parsed.phone.trim().replace(/[^\d+]/g, "");
+  const idNumber = parsed.idNumber.trim();
+  const documentReference = parsed.documentReference.trim();
+  const documentType = parsed.documentType.trim() || "identity_document";
   const domain =
     getEmailDomain(email);
 
@@ -131,7 +118,10 @@ export async function createCompanyOnboarding(
     !name ||
     !industry ||
     !companySize ||
-    !password
+    !password ||
+    !phone ||
+    !/^\d{14}$/.test(idNumber) ||
+    !documentReference
   ) {
     throw new Error(
       "Company name, email, password, industry, and company size are required.",
@@ -158,6 +148,10 @@ export async function createCompanyOnboarding(
     salt: passwordSalt,
   } = hashPassword(password);
 
+  const idNumberHash = createHash("sha256")
+    .update(idNumber)
+    .digest("hex");
+
   const requestedPlan =
     subscription;
 
@@ -167,7 +161,7 @@ export async function createCompanyOnboarding(
     );
 
   try {
-    return await db.transaction(
+      return await db.transaction(
       async (transaction) => {
         /*
          * Create one application ID and use it
@@ -271,6 +265,9 @@ export async function createCompanyOnboarding(
               user.name,
             applicantEmail:
               email,
+            applicantPhone:
+              phone,
+            idNumberHash,
             companyName:
               name,
             companyDomain:
@@ -278,6 +275,8 @@ export async function createCompanyOnboarding(
             industry,
             companySize,
             requestedPlan,
+            documentReference,
+            documentType,
             verificationStatus:
               "pending_review",
           });
