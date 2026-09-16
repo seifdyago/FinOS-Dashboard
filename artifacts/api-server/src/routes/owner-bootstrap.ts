@@ -1,6 +1,12 @@
-import { Router, type IRouter } from "express";
-import { db, organizations, platformAdmins, users } from "@workspace/db";
+import {
+  accountApplications,
+  db,
+  organizations,
+  platformAdmins,
+  users,
+} from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { hashPassword } from "../lib/password-auth";
 
 const router: IRouter = Router();
@@ -42,9 +48,33 @@ router.post(
           ? req.body.password
           : "";
 
+      const phone =
+        typeof req.body?.phone === "string"
+          ? req.body.phone.trim().replace(/[^\d+]/g, "")
+          : "";
+
+      const idNumber =
+        typeof req.body?.idNumber === "string"
+          ? req.body.idNumber.trim()
+          : "";
+
       if (password.length < 8) {
         res.status(400).json({
           error: "Invalid password.",
+        });
+        return;
+      }
+
+      if (!phone) {
+        res.status(400).json({
+          error: "Owner phone number is required.",
+        });
+        return;
+      }
+
+      if (!/^\d{14}$/.test(idNumber)) {
+        res.status(400).json({
+          error: "Owner national ID must contain exactly 14 digits.",
         });
         return;
       }
@@ -53,6 +83,10 @@ router.post(
         hash: passwordHash,
         salt: passwordSalt,
       } = hashPassword(password);
+
+      const idNumberHash = createHash("sha256")
+        .update(idNumber)
+        .digest("hex");
 
       const result = await db.transaction(
         async (tx) => {
@@ -142,6 +176,93 @@ router.post(
             throw new Error(
               "Unable to create/update owner.",
             );
+          }
+
+          const existingApplications =
+            await tx
+              .select()
+              .from(accountApplications)
+              .where(
+                eq(
+                  accountApplications.applicantEmail,
+                  OWNER_EMAIL,
+                ),
+              )
+              .limit(1);
+
+          const existingApplication =
+            existingApplications[0];
+
+          if (existingApplication) {
+            await tx
+              .update(accountApplications)
+              .set({
+                organizationId:
+                  organization.id,
+                applicantName:
+                  "Seifdyago",
+                applicantEmail:
+                  OWNER_EMAIL,
+                applicantPhone:
+                  phone,
+                idNumberHash,
+                companyName:
+                  organization.name,
+                companyDomain:
+                  organization.domain,
+                industry:
+                  organization.industry,
+                companySize:
+                  organization.companySize,
+                requestedPlan:
+                  "basic",
+                verificationStatus:
+                  "approved",
+                reviewedByUserId:
+                  user.id,
+                reviewedAt:
+                  new Date(),
+                rejectionReason:
+                  null,
+                updatedAt:
+                  new Date(),
+              })
+              .where(
+                eq(
+                  accountApplications.id,
+                  existingApplication.id,
+                ),
+              );
+          } else {
+            await tx
+              .insert(accountApplications)
+              .values({
+                organizationId:
+                  organization.id,
+                applicantName:
+                  "Seifdyago",
+                applicantEmail:
+                  OWNER_EMAIL,
+                applicantPhone:
+                  phone,
+                idNumberHash,
+                companyName:
+                  organization.name,
+                companyDomain:
+                  organization.domain,
+                industry:
+                  organization.industry,
+                companySize:
+                  organization.companySize,
+                requestedPlan:
+                  "basic",
+                verificationStatus:
+                  "approved",
+                reviewedByUserId:
+                  user.id,
+                reviewedAt:
+                  new Date(),
+              });
           }
 
           const admin = (
