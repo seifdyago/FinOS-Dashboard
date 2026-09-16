@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
+import { Router, type IRouter } from "express";
 import { hashPassword } from "../lib/password-auth";
 
 const router: IRouter = Router();
@@ -74,7 +75,8 @@ router.post(
 
       if (!/^\d{14}$/.test(idNumber)) {
         res.status(400).json({
-          error: "Owner national ID must contain exactly 14 digits.",
+          error:
+            "Owner national ID must contain exactly 14 digits.",
         });
         return;
       }
