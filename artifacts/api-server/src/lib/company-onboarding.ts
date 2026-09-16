@@ -283,6 +283,8 @@ export async function createCompanyOnboarding(
           .insert(accountApplications)
           .values({
             id: applicationId,
+            organizationId:
+              organization.id,
             applicantName:
               fullName,
             applicantEmail:
