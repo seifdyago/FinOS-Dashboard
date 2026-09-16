@@ -11,8 +11,44 @@ import {
 } from "@workspace/api-zod";
 
 import { recordActivityEvent } from "../lib/activity-service";
+import { privateObjectStorage } from "../lib/private-object-storage";
+import { validateKnowledgeFileMetadata } from "../lib/knowledge-document-repository";
+import {
+  RequestOnboardingDocumentUploadUrlBody,
+  RequestOnboardingDocumentUploadUrlResponse,
+} from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+router.post(
+  "/onboarding/document-upload-url",
+  async (req, res): Promise<void> => {
+    const parsed = RequestOnboardingDocumentUploadUrlBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json({ error: parsed.error.message });
+      return;
+    }
+
+    try {
+      validateKnowledgeFileMetadata({
+        originalFileName: parsed.data.original_file_name,
+        mimeType: parsed.data.mime_type,
+        sizeBytes: parsed.data.size_bytes,
+      });
+      const objectPath = privateObjectStorage.createOnboardingObjectPath();
+      const uploadUrl = await privateObjectStorage.createUploadUrl(objectPath);
+      res.status(200).json(
+        RequestOnboardingDocumentUploadUrlResponse.parse({
+          upload_url: uploadUrl,
+          storage_key: objectPath,
+        }),
+      );
+    } catch (error) {
+      req.log.error({ error }, "Onboarding document upload URL failed");
+      res.status(500).json({ error: "Unable to prepare the identity document upload." });
+    }
+  },
+);
 
 router.post(
   "/onboarding/companies",

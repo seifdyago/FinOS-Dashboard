@@ -11,6 +11,7 @@ import { CreateCompanyOnboardingBody } from "@workspace/api-zod";
 import { createHash, randomUUID } from "node:crypto";
 
 import { hashPassword } from "./password-auth";
+import { privateObjectStorage } from "./private-object-storage";
 
 export class CompanyDomainAlreadyExistsError extends Error {
   constructor() {
@@ -21,6 +22,7 @@ export class CompanyDomainAlreadyExistsError extends Error {
 
 export type CompanyOnboardingInput = {
   name: string;
+  full_name: string;
   email: string;
   password: string;
   industry: string;
@@ -109,6 +111,7 @@ export async function createCompanyOnboarding(
     CreateCompanyOnboardingBody.parse(input);
 
   const name = parsed.name.trim();
+  const fullName = parsed.full_name.trim();
   const email = normalizeEmail(parsed.email);
   const password = parsed.password;
   const industry = parsed.industry.trim();
@@ -125,6 +128,7 @@ export async function createCompanyOnboarding(
 
   if (
     !name ||
+    !fullName ||
     !industry ||
     !companySize ||
     !password ||
@@ -134,6 +138,15 @@ export async function createCompanyOnboarding(
   ) {
     throw new Error(
       "Company name, email, password, industry, and company size are required.",
+    );
+  }
+
+  if (
+    !documentReference.startsWith("/objects/uploads/onboarding/") ||
+    !(await privateObjectStorage.objectExists(documentReference))
+  ) {
+    throw new Error(
+      "The uploaded identity document could not be verified in private storage.",
     );
   }
 
@@ -225,7 +238,7 @@ export async function createCompanyOnboarding(
                 organization.id,
               email,
               name:
-                getAdminName(email),
+                fullName,
               role: "admin",
               passwordHash,
               passwordSalt,
@@ -271,7 +284,7 @@ export async function createCompanyOnboarding(
           .values({
             id: applicationId,
             applicantName:
-              user.name,
+              fullName,
             applicantEmail:
               email,
             applicantPhone:

@@ -1331,17 +1331,42 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
     try {
       const normalizedEmail = normalizeEmail(email);
+      const uploadResponse = await fetch('/api/onboarding/document-upload-url', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          original_file_name: idDocument.name,
+          mime_type: idDocument.type || 'application/pdf',
+          size_bytes: idDocument.size,
+        }),
+      });
+      const uploadPayload = await uploadResponse.json().catch(() => ({}));
+      if (!uploadResponse.ok || typeof uploadPayload?.upload_url !== 'string' || typeof uploadPayload?.storage_key !== 'string') {
+        setError(typeof uploadPayload?.error === 'string' ? uploadPayload.error : 'Unable to prepare the identity document upload.');
+        return;
+      }
+      const binaryUpload = await fetch(uploadPayload.upload_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': idDocument.type || 'application/octet-stream' },
+        body: idDocument,
+      });
+      if (!binaryUpload.ok) {
+        setError('The identity document could not be uploaded securely. Please try again.');
+        return;
+      }
       const response = await fetch('/api/onboarding/companies', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           name: companyName.trim(),
+          full_name: fullName.trim(),
           email: normalizedEmail,
           password,
           phone: phone.trim().replace(/[^\d+]/g, ''),
           idNumber: idNumber.trim(),
-          documentReference: idDocument.name,
+          documentReference: uploadPayload.storage_key,
           documentType: idDocument.type || 'identity_document',
           industry,
           company_size: companySize,
@@ -1358,6 +1383,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setPassword('');
       setConfirmPassword('');
       setIdDocument(null);
+      setFullName('');
       setError('');
       toast.success('Company submitted. Security review is required before sign-in.');
     } catch {
@@ -1506,7 +1532,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setResetOtp('');
       setResetNewPassword('');
       setResetPhone('');
-      setResetIdName('');
+       setResetIdNumber('');
       setResetStep(1);
       setForgotOpen(false);
       setError('');

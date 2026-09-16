@@ -5,26 +5,56 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateCompanyOnboardingRequestSubscription } from './createCompanyOnboardingRequestSubscription';
 
 export interface CreateCompanyOnboardingRequest {
-  /** @minLength 2 */
+  /**
+     * Company name
+     * @minLength 2
+     */
   name: string;
   /** Work email address */
   email: string;
-  /** @minLength 1 */
+  /**
+     * Applicant full legal name
+     * @minLength 2
+     */
+  full_name: string;
+  /**
+     * Registered applicant phone number
+     * @minLength 1
+     */
   phone: string;
-  /** @minLength 1 */
+  /**
+     * Applicant national ID number
+     * @minLength 14
+     */
   idNumber: string;
-  /** @minLength 1 */
+  /**
+     * Private App Storage object path for the uploaded document
+     * @minLength 1
+     */
   documentReference: string;
-  /** @minLength 1 */
+  /**
+     * Uploaded document MIME type
+     * @minLength 1
+     */
   documentType: string;
-  /** @minLength 1 */
-  industry: string;
-  /** @minLength 1 */
-  company_size: string;
-  /** Account password. The server stores only a secure password hash. */
+  /**
+     * Account password. The server stores only a secure password hash.
+     * @minLength 8
+     */
   password: string;
+  /**
+     * Company industry
+     * @minLength 1
+     */
+  industry: string;
+  /**
+     * Company size
+     * @minLength 1
+     */
+  company_size: string;
   /** Requested subscription plan */
-  subscription: 'basic' | 'premium';
+  subscription: CreateCompanyOnboardingRequestSubscription;
 }

@@ -7,116 +7,288 @@
  */
 import * as zod from 'zod';
 
+
 /**
  * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
   "status": zod.string()
-});
+})
+
 
 /**
- * Creates an organization and its initial admin user.
+ * Creates a pending organization and its initial admin user for security review.
  * @summary Create a company workspace
  */
 export const createCompanyOnboardingBodyNameMin = 2;
 
+export const createCompanyOnboardingBodyFullNameMin = 2;
+
+
+export const createCompanyOnboardingBodyIdNumberMin = 14;
+
+
+
+export const createCompanyOnboardingBodyPasswordMin = 8;
+
+
+
+
+
 export const CreateCompanyOnboardingBody = zod.object({
-  "name": zod.string().min(createCompanyOnboardingBodyNameMin),
+  "name": zod.string().min(createCompanyOnboardingBodyNameMin).describe('Company name'),
   "email": zod.string().email().describe('Work email address'),
-  "phone": zod.string().min(1),
-  "idNumber": zod.string().min(1),
-  "documentReference": zod.string().min(1),
-  "documentType": zod.string().min(1),
-  "password": zod.string().min(8).describe('Account password. The server stores only a secure password hash.'),
-  "industry": zod.string().min(1),
-  "company_size": zod.string().min(1),
+  "full_name": zod.string().min(createCompanyOnboardingBodyFullNameMin).describe('Applicant full legal name'),
+  "phone": zod.string().min(1).describe('Registered applicant phone number'),
+  "idNumber": zod.string().min(createCompanyOnboardingBodyIdNumberMin).describe('Applicant national ID number'),
+  "documentReference": zod.string().min(1).describe('Private App Storage object path for the uploaded document'),
+  "documentType": zod.string().min(1).describe('Uploaded document MIME type'),
+  "password": zod.string().min(createCompanyOnboardingBodyPasswordMin).describe('Account password. The server stores only a secure password hash.'),
+  "industry": zod.string().min(1).describe('Company industry'),
+  "company_size": zod.string().min(1).describe('Company size'),
   "subscription": zod.enum(['basic', 'premium']).describe('Requested subscription plan')
-});
+})
 
 export const CreateCompanyOnboardingResponse = zod.object({
   "organization": zod.object({
-    "id": zod.string(),
-    "name": zod.string(),
-    "domain": zod.string(),
-    "initials": zod.string(),
-    "industry": zod.string(),
-    "company_size": zod.string(),
-    "status": zod.string()
-  }),
+  "id": zod.string(),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "initials": zod.string(),
+  "industry": zod.string(),
+  "company_size": zod.string(),
+  "status": zod.string()
+}),
   "user": zod.object({
-    "id": zod.string(),
-    "organization_id": zod.string(),
-    "email": zod.string(),
-    "name": zod.string(),
-    "role": zod.string(),
-    "status": zod.string()
-  })
-});
+  "id": zod.string(),
+  "organization_id": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "status": zod.string()
+})
+})
+
 
 /**
- * Request a private knowledge file upload URL.
+ * @summary Request a private onboarding document upload URL
+ */
+
+
+
+
+
+export const RequestOnboardingDocumentUploadUrlBody = zod.object({
+  "original_file_name": zod.string().min(1),
+  "mime_type": zod.string().min(1),
+  "size_bytes": zod.number().min(1)
+})
+
+export const RequestOnboardingDocumentUploadUrlResponse = zod.object({
+  "upload_url": zod.string(),
+  "storage_key": zod.string()
+})
+
+
+/**
+ * @summary Sign in with email and password
+ */
+
+
+
+export const LoginBody = zod.object({
+  "email": zod.string().email(),
+  "password": zod.string().min(1)
+})
+
+export const LoginResponse = zod.object({
+  "user": zod.object({
+  "id": zod.string(),
+  "organization_id": zod.string(),
+  "email": zod.string().email(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "status": zod.string()
+}),
+  "expires_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get the current authenticated session
+ */
+export const GetSessionResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "user": zod.union([zod.object({
+  "id": zod.string(),
+  "organization_id": zod.string(),
+  "email": zod.string().email(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "status": zod.string()
+}),zod.null()]).optional()
+})
+
+
+/**
+ * @summary Revoke the current session
+ */
+export const LogoutResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "user": zod.union([zod.object({
+  "id": zod.string(),
+  "organization_id": zod.string(),
+  "email": zod.string().email(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "status": zod.string()
+}),zod.null()]).optional()
+})
+
+
+/**
+ * @summary Request a password reset verification code
+ */
+
+export const requestPasswordResetBodyIdNumberMin = 14;
+
+
+
+export const RequestPasswordResetBody = zod.object({
+  "email": zod.string().email(),
+  "phone": zod.string().min(1),
+  "idNumber": zod.string().min(requestPasswordResetBodyIdNumberMin)
+})
+
+export const RequestPasswordResetResponse = zod.object({
+  "accepted": zod.boolean(),
+  "message": zod.string(),
+  "test_otp": zod.string().nullish()
+})
+
+
+/**
+ * @summary Verify a password reset code
+ */
+export const verifyPasswordResetBodyOtpMin = 6;
+export const verifyPasswordResetBodyOtpMax = 6;
+
+
+
+export const VerifyPasswordResetBody = zod.object({
+  "email": zod.string().email(),
+  "otp": zod.string().min(verifyPasswordResetBodyOtpMin).max(verifyPasswordResetBodyOtpMax)
+})
+
+export const VerifyPasswordResetResponse = zod.object({
+  "verified": zod.boolean(),
+  "reset_token": zod.string(),
+  "expires_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Complete a password reset
+ */
+
+export const completePasswordResetBodyNewPasswordMin = 8;
+
+
+
+export const CompletePasswordResetBody = zod.object({
+  "email": zod.string().email(),
+  "resetToken": zod.string().min(1),
+  "newPassword": zod.string().min(completePasswordResetBodyNewPasswordMin)
+})
+
+export const CompletePasswordResetResponse = zod.object({
+  "reset": zod.boolean(),
+  "message": zod.string()
+})
+
+
+/**
  * @summary Request a private knowledge file upload URL
  */
+
+
+
 export const RequestKnowledgeFileUploadUrlHeader = zod.object({
   "x-finos-organization-id": zod.string().min(1),
   "x-finos-user-email": zod.string()
-});
+})
+
+
+
+
+
 
 export const RequestKnowledgeFileUploadUrlBody = zod.object({
   "original_file_name": zod.string().min(1),
   "mime_type": zod.string().min(1),
   "size_bytes": zod.number().min(1),
-  "employee_key": zod.string().nullable().optional()
-});
+  "employee_key": zod.string().nullish()
+})
 
 export const RequestKnowledgeFileUploadUrlResponse = zod.object({
   "upload_url": zod.string(),
   "storage_key": zod.string()
-});
+})
+
 
 /**
- * List company knowledge files.
  * @summary List company knowledge files
  */
+
+
+
 export const ListKnowledgeFilesHeader = zod.object({
   "x-finos-organization-id": zod.string().min(1),
   "x-finos-user-email": zod.string()
-});
+})
 
-export const ListKnowledgeFilesResponse = zod.array(
-  zod.object({
-    "id": zod.string(),
-    "original_file_name": zod.string(),
-    "file_type": zod.string(),
-    "mime_type": zod.string(),
-    "size_bytes": zod.number(),
-    "storage_key": zod.string(),
-    "uploaded_by_user_id": zod.string().nullable(),
-    "uploader_name": zod.string(),
-    "created_at": zod.string(),
-    "employee_id": zod.string().nullable(),
-    "employee_name": zod.string().nullable(),
-    "status": zod.string()
-  })
-);
+export const ListKnowledgeFilesResponseItem = zod.object({
+  "id": zod.string(),
+  "original_file_name": zod.string(),
+  "file_type": zod.string(),
+  "mime_type": zod.string(),
+  "size_bytes": zod.number(),
+  "storage_key": zod.string(),
+  "uploaded_by_user_id": zod.string().nullable(),
+  "uploader_name": zod.string(),
+  "created_at": zod.string(),
+  "employee_id": zod.string().nullable(),
+  "employee_name": zod.string().nullable(),
+  "status": zod.string()
+})
+export const ListKnowledgeFilesResponse = zod.array(ListKnowledgeFilesResponseItem)
+
 
 /**
- * Save uploaded knowledge file metadata.
  * @summary Save uploaded knowledge file metadata
  */
+
+
+
 export const FinalizeKnowledgeFileHeader = zod.object({
   "x-finos-organization-id": zod.string().min(1),
   "x-finos-user-email": zod.string()
-});
+})
+
+
+
+
+
+
 
 export const FinalizeKnowledgeFileBody = zod.object({
   "original_file_name": zod.string().min(1),
   "mime_type": zod.string().min(1),
   "size_bytes": zod.number().min(1),
   "storage_key": zod.string().min(1),
-  "employee_key": zod.string().nullable().optional()
-});
+  "employee_key": zod.string().nullish()
+})
 
 export const FinalizeKnowledgeFileResponse = zod.object({
   "id": zod.string(),
@@ -131,109 +303,193 @@ export const FinalizeKnowledgeFileResponse = zod.object({
   "employee_id": zod.string().nullable(),
   "employee_name": zod.string().nullable(),
   "status": zod.string()
-});
+})
+
 
 /**
- * Get a private knowledge file download URL.
  * @summary Get a private knowledge file download URL
  */
+export const GetKnowledgeFileDownloadUrlParams = zod.object({
+  "fileId": zod.coerce.string()
+})
+
+
+
+
 export const GetKnowledgeFileDownloadUrlHeader = zod.object({
   "x-finos-organization-id": zod.string().min(1),
   "x-finos-user-email": zod.string()
-});
-
-export const GetKnowledgeFileDownloadUrlParams = zod.object({
-  "fileId": zod.string()
-});
+})
 
 export const GetKnowledgeFileDownloadUrlResponse = zod.object({
   "download_url": zod.string()
-});
+})
+
 
 /**
- * Delete a company knowledge file.
  * @summary Delete a company knowledge file
  */
+export const DeleteKnowledgeFileParams = zod.object({
+  "fileId": zod.coerce.string()
+})
+
+
+
+
 export const DeleteKnowledgeFileHeader = zod.object({
   "x-finos-organization-id": zod.string().min(1),
   "x-finos-user-email": zod.string()
-});
+})
 
-export const DeleteKnowledgeFileParams = zod.object({
-  "fileId": zod.string()
-});
+export const DeleteKnowledgeFileResponse = zod.void()
+
 
 /**
- * Get platform owner analytics.
+ * Returns cross-company analytics for an authorized platform owner.
  * @summary Get platform owner analytics
  */
+
+
+
 export const GetPlatformAnalyticsHeader = zod.object({
   "x-finos-platform-admin-email": zod.string().min(1)
-});
+})
 
 export const GetPlatformAnalyticsResponse = zod.object({
   "summary": zod.object({
-    "total_companies": zod.number(),
-    "subscribed_companies": zod.number(),
-    "basic_subscriptions": zod.number(),
-    "premium_subscriptions": zod.number(),
-    "monthly_expected_revenue_cents": zod.number(),
-    "active_companies": zod.number(),
-    "active_users": zod.number(),
-    "total_employees": zod.number(),
-    "total_knowledge_files": zod.number(),
-    "total_storage_bytes": zod.number(),
-    "total_ai_conversations": zod.number(),
-    "total_ai_requests": zod.number(),
-    "total_responses": zod.number(),
-    "companies_registered_last_30_days": zod.number()
-  }),
-  "companies": zod.array(
-    zod.object({
-      "id": zod.string(),
-      "name": zod.string(),
-      "registration_date": zod.string(),
-      "subscription_plan": zod.string(),
-      "subscription_status": zod.string(),
-      "monthly_price_cents": zod.number(),
-      "user_count": zod.number(),
-      "employee_count": zod.number(),
-      "ai_employee_count": zod.number(),
-      "knowledge_file_count": zod.number(),
-      "storage_bytes": zod.number(),
-      "last_activity": zod.string().nullable(),
-      "status": zod.string(),
-      "ai_conversations": zod.number(),
-      "ai_requests": zod.number(),
-      "responses": zod.number()
-    })
-  ),
-  "recent_activity": zod.array(
-    zod.object({
-      "id": zod.string(),
-      "organization_id": zod.string(),
-      "user_id": zod.string().nullable(),
-      "event_type": zod.string(),
-      "metadata": zod.record(zod.string(), zod.unknown()),
-      "created_at": zod.string()
-    })
-  )
-});
+  "total_companies": zod.number(),
+  "subscribed_companies": zod.number(),
+  "basic_subscriptions": zod.number(),
+  "premium_subscriptions": zod.number(),
+  "monthly_expected_revenue_cents": zod.number(),
+  "active_companies": zod.number(),
+  "active_users": zod.number(),
+  "total_employees": zod.number(),
+  "total_knowledge_files": zod.number(),
+  "total_storage_bytes": zod.number(),
+  "total_ai_conversations": zod.number(),
+  "total_ai_requests": zod.number(),
+  "total_responses": zod.number(),
+  "companies_registered_last_30_days": zod.number()
+}),
+  "companies": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "registration_date": zod.string(),
+  "subscription_plan": zod.string(),
+  "subscription_status": zod.string(),
+  "monthly_price_cents": zod.number(),
+  "user_count": zod.number(),
+  "employee_count": zod.number(),
+  "ai_employee_count": zod.number(),
+  "knowledge_file_count": zod.number(),
+  "storage_bytes": zod.number(),
+  "last_activity": zod.string().nullable(),
+  "status": zod.string(),
+  "ai_conversations": zod.number(),
+  "ai_requests": zod.number(),
+  "responses": zod.number()
+})),
+  "recent_activity": zod.array(zod.object({
+  "id": zod.string(),
+  "organization_id": zod.string(),
+  "user_id": zod.string().nullable(),
+  "event_type": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "created_at": zod.string()
+}))
+})
+
 
 /**
- * Record a workspace activity event.
+ * @summary List account applications for review
+ */
+
+
+
+export const ListAccountApplicationsHeader = zod.object({
+  "x-finos-platform-admin-email": zod.string().min(1)
+})
+
+export const ListAccountApplicationsResponseItem = zod.object({
+  "id": zod.string(),
+  "applicant_name": zod.string(),
+  "applicant_email": zod.string().email(),
+  "applicant_phone": zod.string().nullable(),
+  "company_name": zod.string(),
+  "company_domain": zod.string().nullable(),
+  "requested_plan": zod.string(),
+  "document_reference": zod.string().nullable(),
+  "document_type": zod.string().nullable(),
+  "verification_status": zod.string(),
+  "verification_notes": zod.string().nullable(),
+  "rejection_reason": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "reviewed_at": zod.coerce.date().nullable()
+})
+export const ListAccountApplicationsResponse = zod.array(ListAccountApplicationsResponseItem)
+
+
+/**
+ * @summary Approve or reject an account application
+ */
+export const DecideAccountApplicationParams = zod.object({
+  "applicationId": zod.coerce.string()
+})
+
+
+
+
+export const DecideAccountApplicationHeader = zod.object({
+  "x-finos-platform-admin-email": zod.string().min(1)
+})
+
+export const DecideAccountApplicationBody = zod.object({
+  "decision": zod.enum(['approved', 'rejected']),
+  "notes": zod.string().optional(),
+  "rejection_reason": zod.string().optional()
+})
+
+export const DecideAccountApplicationResponse = zod.object({
+  "id": zod.string(),
+  "applicant_name": zod.string(),
+  "applicant_email": zod.string().email(),
+  "applicant_phone": zod.string().nullable(),
+  "company_name": zod.string(),
+  "company_domain": zod.string().nullable(),
+  "requested_plan": zod.string(),
+  "document_reference": zod.string().nullable(),
+  "document_type": zod.string().nullable(),
+  "verification_status": zod.string(),
+  "verification_notes": zod.string().nullable(),
+  "rejection_reason": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "reviewed_at": zod.coerce.date().nullable()
+})
+
+
+/**
+ * Records an organization-scoped activity event and optional usage metric.
  * @summary Record a workspace activity event
  */
+
+
+
 export const RecordActivityEventHeader = zod.object({
   "x-finos-organization-id": zod.string().min(1),
   "x-finos-user-email": zod.string()
-});
+})
+
+
+
 
 export const RecordActivityEventBody = zod.object({
   "event_type": zod.string().min(1),
   "metadata": zod.record(zod.string(), zod.unknown()),
-  "usage_metric_type": zod.string().nullable().optional(),
-  "usage_value": zod.number().nullable().optional()
-});
+  "usage_metric_type": zod.string().nullish(),
+  "usage_value": zod.number().nullish()
+})
 
-export const RecordActivityEventResponse = zod.void();
+export const RecordActivityEventResponse = zod.void()
+
+

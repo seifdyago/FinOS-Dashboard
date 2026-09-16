@@ -20,6 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AccountApplication,
+  AccountApplicationDecisionRequest,
+  AccountApplicationList,
   ApiError,
   CompanyOnboardingResponse,
   CreateCompanyOnboardingRequest,
@@ -30,8 +33,19 @@ import type {
   KnowledgeFileListResponse,
   KnowledgeFileUploadInput,
   KnowledgeFileUploadUrlResponse,
+  LoginRequest,
+  LoginResult,
+  OnboardingDocumentUploadRequest,
+  OnboardingDocumentUploadResponse,
+  PasswordResetCompleteRequest,
+  PasswordResetCompleteResponse,
+  PasswordResetRequest,
+  PasswordResetRequestResponse,
+  PasswordResetVerifyRequest,
+  PasswordResetVerifyResponse,
   PlatformAnalytics,
-  RecordActivityEventRequest
+  RecordActivityEventRequest,
+  SessionResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -148,7 +162,7 @@ export const getCreateCompanyOnboardingUrl = () => {
 }
 
 /**
- * Creates an organization and its initial admin user.
+ * Creates a pending organization and its initial admin user for security review.
  * @summary Create a company workspace
  */
 export const createCompanyOnboarding = async (createCompanyOnboardingRequest: CreateCompanyOnboardingRequest, options?: Parameters<typeof customFetch>[1]): Promise<CompanyOnboardingResponse> => {
@@ -209,6 +223,509 @@ export const useCreateCompanyOnboarding = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getCreateCompanyOnboardingMutationOptions(options));
+    }
+
+export const getRequestOnboardingDocumentUploadUrlUrl = () => {
+
+
+
+
+  return `/api/onboarding/document-upload-url`
+}
+
+/**
+ * @summary Request a private onboarding document upload URL
+ */
+export const requestOnboardingDocumentUploadUrl = async (onboardingDocumentUploadRequest: OnboardingDocumentUploadRequest, options?: Parameters<typeof customFetch>[1]): Promise<OnboardingDocumentUploadResponse> => {
+
+  return customFetch<OnboardingDocumentUploadResponse>(getRequestOnboardingDocumentUploadUrlUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onboardingDocumentUploadRequest)
+  }
+);}
+
+
+
+
+
+export const getRequestOnboardingDocumentUploadUrlMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestOnboardingDocumentUploadUrl>>, TError,{data: BodyType<OnboardingDocumentUploadRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestOnboardingDocumentUploadUrl>>, TError,{data: BodyType<OnboardingDocumentUploadRequest>}, TContext> => {
+
+const mutationKey = ['requestOnboardingDocumentUploadUrl'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestOnboardingDocumentUploadUrl>>, {data: BodyType<OnboardingDocumentUploadRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestOnboardingDocumentUploadUrl(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestOnboardingDocumentUploadUrlMutationResult = NonNullable<Awaited<ReturnType<typeof requestOnboardingDocumentUploadUrl>>>
+    export type RequestOnboardingDocumentUploadUrlMutationBody = BodyType<OnboardingDocumentUploadRequest>
+    export type RequestOnboardingDocumentUploadUrlMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Request a private onboarding document upload URL
+ */
+export const useRequestOnboardingDocumentUploadUrl = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestOnboardingDocumentUploadUrl>>, TError,{data: BodyType<OnboardingDocumentUploadRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestOnboardingDocumentUploadUrl>>,
+        TError,
+        {data: BodyType<OnboardingDocumentUploadRequest>},
+        TContext
+      > => {
+      return useMutation(getRequestOnboardingDocumentUploadUrlMutationOptions(options));
+    }
+
+export const getLoginUrl = () => {
+
+
+
+
+  return `/api/auth/login`
+}
+
+/**
+ * @summary Sign in with email and password
+ */
+export const login = async (loginRequest: LoginRequest, options?: Parameters<typeof customFetch>[1]): Promise<LoginResult> => {
+
+  return customFetch<LoginResult>(getLoginUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(loginRequest)
+  }
+);}
+
+
+
+
+
+export const getLoginMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginRequest>}, TContext> => {
+
+const mutationKey = ['login'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, {data: BodyType<LoginRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  login(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>
+    export type LoginMutationBody = BodyType<LoginRequest>
+    export type LoginMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Sign in with email and password
+ */
+export const useLogin = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof login>>,
+        TError,
+        {data: BodyType<LoginRequest>},
+        TContext
+      > => {
+      return useMutation(getLoginMutationOptions(options));
+    }
+
+export const getGetSessionUrl = () => {
+
+
+
+
+  return `/api/auth/session`
+}
+
+/**
+ * @summary Get the current authenticated session
+ */
+export const getSession = async ( options?: Parameters<typeof customFetch>[1]): Promise<SessionResponse> => {
+
+  return customFetch<SessionResponse>(getGetSessionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSessionQueryKey = () => {
+    return [
+    `/api/auth/session`
+    ] as const;
+    }
+
+
+export const getGetSessionQueryOptions = <TData = Awaited<ReturnType<typeof getSession>>, TError = ErrorType<SessionResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSessionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSession>>> = ({ signal }) => getSession({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSession>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSessionQueryResult = NonNullable<Awaited<ReturnType<typeof getSession>>>
+export type GetSessionQueryError = ErrorType<SessionResponse>
+
+
+/**
+ * @summary Get the current authenticated session
+ */
+
+export function useGetSession<TData = Awaited<ReturnType<typeof getSession>>, TError = ErrorType<SessionResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSessionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getLogoutUrl = () => {
+
+
+
+
+  return `/api/auth/logout`
+}
+
+/**
+ * @summary Revoke the current session
+ */
+export const logout = async ( options?: Parameters<typeof customFetch>[1]): Promise<SessionResponse> => {
+
+  return customFetch<SessionResponse>(getLogoutUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getLogoutMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext> => {
+
+const mutationKey = ['logout'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
+
+
+          return  logout(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>
+
+    export type LogoutMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Revoke the current session
+ */
+export const useLogout = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof logout>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getLogoutMutationOptions(options));
+    }
+
+export const getRequestPasswordResetUrl = () => {
+
+
+
+
+  return `/api/auth/password-reset/request`
+}
+
+/**
+ * @summary Request a password reset verification code
+ */
+export const requestPasswordReset = async (passwordResetRequest: PasswordResetRequest, options?: Parameters<typeof customFetch>[1]): Promise<PasswordResetRequestResponse> => {
+
+  return customFetch<PasswordResetRequestResponse>(getRequestPasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(passwordResetRequest)
+  }
+);}
+
+
+
+
+
+export const getRequestPasswordResetMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequest>}, TContext> => {
+
+const mutationKey = ['requestPasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPasswordReset>>, {data: BodyType<PasswordResetRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestPasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof requestPasswordReset>>>
+    export type RequestPasswordResetMutationBody = BodyType<PasswordResetRequest>
+    export type RequestPasswordResetMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Request a password reset verification code
+ */
+export const useRequestPasswordReset = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestPasswordReset>>,
+        TError,
+        {data: BodyType<PasswordResetRequest>},
+        TContext
+      > => {
+      return useMutation(getRequestPasswordResetMutationOptions(options));
+    }
+
+export const getVerifyPasswordResetUrl = () => {
+
+
+
+
+  return `/api/auth/password-reset/verify`
+}
+
+/**
+ * @summary Verify a password reset code
+ */
+export const verifyPasswordReset = async (passwordResetVerifyRequest: PasswordResetVerifyRequest, options?: Parameters<typeof customFetch>[1]): Promise<PasswordResetVerifyResponse> => {
+
+  return customFetch<PasswordResetVerifyResponse>(getVerifyPasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(passwordResetVerifyRequest)
+  }
+);}
+
+
+
+
+
+export const getVerifyPasswordResetMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPasswordReset>>, TError,{data: BodyType<PasswordResetVerifyRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyPasswordReset>>, TError,{data: BodyType<PasswordResetVerifyRequest>}, TContext> => {
+
+const mutationKey = ['verifyPasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyPasswordReset>>, {data: BodyType<PasswordResetVerifyRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyPasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof verifyPasswordReset>>>
+    export type VerifyPasswordResetMutationBody = BodyType<PasswordResetVerifyRequest>
+    export type VerifyPasswordResetMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Verify a password reset code
+ */
+export const useVerifyPasswordReset = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPasswordReset>>, TError,{data: BodyType<PasswordResetVerifyRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyPasswordReset>>,
+        TError,
+        {data: BodyType<PasswordResetVerifyRequest>},
+        TContext
+      > => {
+      return useMutation(getVerifyPasswordResetMutationOptions(options));
+    }
+
+export const getCompletePasswordResetUrl = () => {
+
+
+
+
+  return `/api/auth/password-reset/complete`
+}
+
+/**
+ * @summary Complete a password reset
+ */
+export const completePasswordReset = async (passwordResetCompleteRequest: PasswordResetCompleteRequest, options?: Parameters<typeof customFetch>[1]): Promise<PasswordResetCompleteResponse> => {
+
+  return customFetch<PasswordResetCompleteResponse>(getCompletePasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(passwordResetCompleteRequest)
+  }
+);}
+
+
+
+
+
+export const getCompletePasswordResetMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completePasswordReset>>, TError,{data: BodyType<PasswordResetCompleteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completePasswordReset>>, TError,{data: BodyType<PasswordResetCompleteRequest>}, TContext> => {
+
+const mutationKey = ['completePasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completePasswordReset>>, {data: BodyType<PasswordResetCompleteRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  completePasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompletePasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof completePasswordReset>>>
+    export type CompletePasswordResetMutationBody = BodyType<PasswordResetCompleteRequest>
+    export type CompletePasswordResetMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Complete a password reset
+ */
+export const useCompletePasswordReset = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completePasswordReset>>, TError,{data: BodyType<PasswordResetCompleteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completePasswordReset>>,
+        TError,
+        {data: BodyType<PasswordResetCompleteRequest>},
+        TContext
+      > => {
+      return useMutation(getCompletePasswordResetMutationOptions(options));
     }
 
 export const getRequestKnowledgeFileUploadUrlUrl = () => {
@@ -655,6 +1172,155 @@ export function useGetPlatformAnalytics<TData = Awaited<ReturnType<typeof getPla
 
 
 
+
+export const getListAccountApplicationsUrl = () => {
+
+
+
+
+  return `/api/platform-admin/account-applications`
+}
+
+/**
+ * @summary List account applications for review
+ */
+export const listAccountApplications = async ( options?: Parameters<typeof customFetch>[1]): Promise<AccountApplicationList> => {
+
+  return customFetch<AccountApplicationList>(getListAccountApplicationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAccountApplicationsQueryKey = () => {
+    return [
+    `/api/platform-admin/account-applications`
+    ] as const;
+    }
+
+
+export const getListAccountApplicationsQueryOptions = <TData = Awaited<ReturnType<typeof listAccountApplications>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAccountApplications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAccountApplicationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAccountApplications>>> = ({ signal }) => listAccountApplications({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAccountApplications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAccountApplicationsQueryResult = NonNullable<Awaited<ReturnType<typeof listAccountApplications>>>
+export type ListAccountApplicationsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List account applications for review
+ */
+
+export function useListAccountApplications<TData = Awaited<ReturnType<typeof listAccountApplications>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAccountApplications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAccountApplicationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideAccountApplicationUrl = (applicationId: string,) => {
+
+
+
+
+  return `/api/platform-admin/account-applications/${applicationId}/decision`
+}
+
+/**
+ * @summary Approve or reject an account application
+ */
+export const decideAccountApplication = async (applicationId: string,
+    accountApplicationDecisionRequest: AccountApplicationDecisionRequest, options?: Parameters<typeof customFetch>[1]): Promise<AccountApplication> => {
+
+  return customFetch<AccountApplication>(getDecideAccountApplicationUrl(applicationId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accountApplicationDecisionRequest)
+  }
+);}
+
+
+
+
+
+export const getDecideAccountApplicationMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideAccountApplication>>, TError,{applicationId: string;data: BodyType<AccountApplicationDecisionRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideAccountApplication>>, TError,{applicationId: string;data: BodyType<AccountApplicationDecisionRequest>}, TContext> => {
+
+const mutationKey = ['decideAccountApplication'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideAccountApplication>>, {applicationId: string;data: BodyType<AccountApplicationDecisionRequest>}> = (props) => {
+          const {applicationId,data} = props ?? {};
+
+          return  decideAccountApplication(applicationId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideAccountApplicationMutationResult = NonNullable<Awaited<ReturnType<typeof decideAccountApplication>>>
+    export type DecideAccountApplicationMutationBody = BodyType<AccountApplicationDecisionRequest>
+    export type DecideAccountApplicationMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Approve or reject an account application
+ */
+export const useDecideAccountApplication = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideAccountApplication>>, TError,{applicationId: string;data: BodyType<AccountApplicationDecisionRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideAccountApplication>>,
+        TError,
+        {applicationId: string;data: BodyType<AccountApplicationDecisionRequest>},
+        TContext
+      > => {
+      return useMutation(getDecideAccountApplicationMutationOptions(options));
+    }
 
 export const getRecordActivityEventUrl = () => {
 

@@ -1,5 +1,6 @@
 import { createInsertSchema } from "drizzle-zod";
 import {
+  index,
   pgTable,
   text,
   integer,
@@ -48,12 +49,22 @@ export const passwordResetTokens = pgTable(
       withTimezone: true,
     }),
 
+    resetTokenHash: text("reset_token_hash"),
+
+    resetTokenExpiresAt: timestamp("reset_token_expires_at", {
+      withTimezone: true,
+    }),
+
     createdAt: timestamp("created_at", {
       withTimezone: true,
     })
       .notNull()
       .defaultNow(),
   },
+  (table) => ({
+    userIdIndex: index("password_reset_tokens_user_id_idx").on(table.userId),
+    resetTokenHashIndex: index("password_reset_tokens_reset_token_hash_idx").on(table.resetTokenHash),
+  }),
 );
 
 export const insertPasswordResetTokenSchema =

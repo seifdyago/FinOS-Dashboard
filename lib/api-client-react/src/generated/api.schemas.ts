@@ -9,15 +9,189 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * Requested subscription plan
+ */
+export type CreateCompanyOnboardingRequestSubscription = typeof CreateCompanyOnboardingRequestSubscription[keyof typeof CreateCompanyOnboardingRequestSubscription];
+
+
+export const CreateCompanyOnboardingRequestSubscription = {
+  basic: 'basic',
+  premium: 'premium',
+} as const;
+
 export interface CreateCompanyOnboardingRequest {
-  /** @minLength 2 */
+  /**
+     * Company name
+     * @minLength 2
+     */
   name: string;
   /** Work email address */
   email: string;
-  /** @minLength 1 */
+  /**
+     * Applicant full legal name
+     * @minLength 2
+     */
+  full_name: string;
+  /**
+     * Registered applicant phone number
+     * @minLength 1
+     */
+  phone: string;
+  /**
+     * Applicant national ID number
+     * @minLength 14
+     */
+  idNumber: string;
+  /**
+     * Private App Storage object path for the uploaded document
+     * @minLength 1
+     */
+  documentReference: string;
+  /**
+     * Uploaded document MIME type
+     * @minLength 1
+     */
+  documentType: string;
+  /**
+     * Account password. The server stores only a secure password hash.
+     * @minLength 8
+     */
+  password: string;
+  /**
+     * Company industry
+     * @minLength 1
+     */
   industry: string;
-  /** @minLength 1 */
+  /**
+     * Company size
+     * @minLength 1
+     */
   company_size: string;
+  /** Requested subscription plan */
+  subscription: CreateCompanyOnboardingRequestSubscription;
+}
+
+export interface OnboardingDocumentUploadRequest {
+  /** @minLength 1 */
+  original_file_name: string;
+  /** @minLength 1 */
+  mime_type: string;
+  /** @minimum 1 */
+  size_bytes: number;
+}
+
+export interface OnboardingDocumentUploadResponse {
+  upload_url: string;
+  storage_key: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  /** @minLength 1 */
+  password: string;
+}
+
+export interface AuthenticatedUser {
+  id: string;
+  organization_id: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+}
+
+export interface LoginResult {
+  user: AuthenticatedUser;
+  expires_at: string;
+}
+
+export interface SessionResponse {
+  authenticated: boolean;
+  user?: AuthenticatedUser | null;
+}
+
+export interface PasswordResetRequest {
+  email: string;
+  /** @minLength 1 */
+  phone: string;
+  /** @minLength 14 */
+  idNumber: string;
+}
+
+export interface PasswordResetRequestResponse {
+  accepted: boolean;
+  message: string;
+  /** @nullable */
+  test_otp?: string | null;
+}
+
+export interface PasswordResetVerifyRequest {
+  email: string;
+  /**
+     * @minLength 6
+     * @maxLength 6
+     */
+  otp: string;
+}
+
+export interface PasswordResetVerifyResponse {
+  verified: boolean;
+  reset_token: string;
+  expires_at: string;
+}
+
+export interface PasswordResetCompleteRequest {
+  email: string;
+  /** @minLength 1 */
+  resetToken: string;
+  /** @minLength 8 */
+  newPassword: string;
+}
+
+export interface PasswordResetCompleteResponse {
+  reset: boolean;
+  message: string;
+}
+
+export interface AccountApplication {
+  id: string;
+  applicant_name: string;
+  applicant_email: string;
+  /** @nullable */
+  applicant_phone: string | null;
+  company_name: string;
+  /** @nullable */
+  company_domain: string | null;
+  requested_plan: string;
+  /** @nullable */
+  document_reference: string | null;
+  /** @nullable */
+  document_type: string | null;
+  verification_status: string;
+  /** @nullable */
+  verification_notes: string | null;
+  /** @nullable */
+  rejection_reason: string | null;
+  created_at: string;
+  /** @nullable */
+  reviewed_at: string | null;
+}
+
+export type AccountApplicationList = AccountApplication[];
+
+export type AccountApplicationDecisionRequestDecision = typeof AccountApplicationDecisionRequestDecision[keyof typeof AccountApplicationDecisionRequestDecision];
+
+
+export const AccountApplicationDecisionRequestDecision = {
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface AccountApplicationDecisionRequest {
+  decision: AccountApplicationDecisionRequestDecision;
+  notes?: string;
+  rejection_reason?: string;
 }
 
 export interface OnboardedOrganization {

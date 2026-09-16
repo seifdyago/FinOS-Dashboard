@@ -23,6 +23,10 @@ export class PrivateObjectStorage {
     return `/objects/uploads/${safeOrganizationId}/${randomUUID()}`;
   }
 
+  createOnboardingObjectPath(): string {
+    return `/objects/uploads/onboarding/${randomUUID()}`;
+  }
+
   private getStoragePath(objectPath: string): string {
     if (!objectPath.startsWith("/objects/uploads/")) {
       throw new Error("Invalid private object path.");

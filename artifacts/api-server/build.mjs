@@ -23,6 +23,10 @@ async function buildAll() {
         artifactDir,
         "src/app.ts",
       ),
+      path.resolve(
+        artifactDir,
+        "src/index.ts",
+      ),
     ],
 
     platform: "node",

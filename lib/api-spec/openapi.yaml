@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: onboarding
     description: Company onboarding operations
+  - name: auth
+    description: Authentication and password recovery operations
   - name: knowledge
     description: Company knowledge file operations
   - name: platform-admin
@@ -55,6 +57,181 @@ paths:
                 $ref: "#/components/schemas/CompanyOnboardingResponse"
         "409":
           description: Company domain already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /onboarding/document-upload-url:
+    post:
+      operationId: requestOnboardingDocumentUploadUrl
+      tags: [onboarding]
+      summary: Request a private onboarding document upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardingDocumentUploadRequest"
+      responses:
+        "200":
+          description: Private upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingDocumentUploadResponse"
+        "422":
+          description: Invalid file metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Sign in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Account inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/session:
+    get:
+      operationId: getSession
+      tags: [auth]
+      summary: Get the current authenticated session
+      responses:
+        "200":
+          description: Session state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "401":
+          description: No active session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Revoke the current session
+      responses:
+        "200":
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+
+  /auth/password-reset/request:
+    post:
+      operationId: requestPasswordReset
+      tags: [auth]
+      summary: Request a password reset verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "200":
+          description: Generic password reset acceptance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetRequestResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/password-reset/verify:
+    post:
+      operationId: verifyPasswordReset
+      tags: [auth]
+      summary: Verify a password reset code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetVerifyRequest"
+      responses:
+        "200":
+          description: Reset authorization issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetVerifyResponse"
+        "400":
+          description: Invalid or expired code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/password-reset/complete:
+    post:
+      operationId: completePasswordReset
+      tags: [auth]
+      summary: Complete a password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetCompleteRequest"
+      responses:
+        "200":
+          description: Password reset completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetCompleteResponse"
+        "400":
+          description: Invalid or expired reset token
           content:
             application/json:
               schema:
@@ -269,8 +446,79 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+
+  /platform-admin/account-applications:
+    get:
+      operationId: listAccountApplications
+      tags: [platform-admin]
+      summary: List account applications for review
+      parameters:
+        - $ref: "#/components/parameters/FinOSPlatformAdminEmail"
+      responses:
+        "200":
+          description: Account applications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountApplicationList"
+        "401":
+          description: Missing platform admin identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
         "403":
           description: Platform admin access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /platform-admin/account-applications/{applicationId}/decision:
+    post:
+      operationId: decideAccountApplication
+      tags: [platform-admin]
+      summary: Approve or reject an account application
+      parameters:
+        - $ref: "#/components/parameters/FinOSPlatformAdminEmail"
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountApplicationDecisionRequest"
+      responses:
+        "200":
+          description: Application decision applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountApplication"
+        "400":
+          description: Invalid decision or application state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Missing platform admin identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Platform admin access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Application not found
           content:
             application/json:
               schema:
@@ -366,6 +614,31 @@ components:
           format: email
           description: Work email address
 
+        full_name:
+          type: string
+          minLength: 2
+          description: Applicant full legal name
+
+        phone:
+          type: string
+          minLength: 1
+          description: Registered applicant phone number
+
+        idNumber:
+          type: string
+          minLength: 14
+          description: Applicant national ID number
+
+        documentReference:
+          type: string
+          minLength: 1
+          description: Private App Storage object path for the uploaded document
+
+        documentType:
+          type: string
+          minLength: 1
+          description: Uploaded document MIME type
+
         password:
           type: string
           minLength: 8
@@ -390,11 +663,183 @@ components:
 
       required:
         - name
+        - full_name
         - email
+        - phone
+        - idNumber
+        - documentReference
+        - documentType
         - password
         - industry
         - company_size
         - subscription
+
+    OnboardingDocumentUploadRequest:
+      type: object
+      properties:
+        original_file_name:
+          type: string
+          minLength: 1
+        mime_type:
+          type: string
+          minLength: 1
+        size_bytes:
+          type: number
+          minimum: 1
+      required:
+        - original_file_name
+        - mime_type
+        - size_bytes
+
+    OnboardingDocumentUploadResponse:
+      type: object
+      properties:
+        upload_url:
+          type: string
+        storage_key:
+          type: string
+      required:
+        - upload_url
+        - storage_key
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+      required: [email, password]
+
+    AuthenticatedUser:
+      type: object
+      properties:
+        id: { type: string }
+        organization_id: { type: string }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { type: string }
+        status: { type: string }
+      required: [id, organization_id, email, name, role, status]
+
+    LoginResult:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthenticatedUser"
+        expires_at:
+          type: string
+          format: date-time
+      required: [user, expires_at]
+
+    SessionResponse:
+      type: object
+      properties:
+        authenticated: { type: boolean }
+        user:
+          anyOf:
+            - $ref: "#/components/schemas/AuthenticatedUser"
+            - type: "null"
+      required: [authenticated]
+
+    PasswordResetRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        phone: { type: string, minLength: 1 }
+        idNumber: { type: string, minLength: 14 }
+      required: [email, phone, idNumber]
+
+    PasswordResetRequestResponse:
+      type: object
+      properties:
+        accepted: { type: boolean }
+        message: { type: string }
+        test_otp:
+          type: [string, "null"]
+      required: [accepted, message]
+
+    PasswordResetVerifyRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        otp: { type: string, minLength: 6, maxLength: 6 }
+      required: [email, otp]
+
+    PasswordResetVerifyResponse:
+      type: object
+      properties:
+        verified: { type: boolean }
+        reset_token: { type: string }
+        expires_at: { type: string, format: date-time }
+      required: [verified, reset_token, expires_at]
+
+    PasswordResetCompleteRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        resetToken: { type: string, minLength: 1 }
+        newPassword: { type: string, minLength: 8 }
+      required: [email, resetToken, newPassword]
+
+    PasswordResetCompleteResponse:
+      type: object
+      properties:
+        reset: { type: boolean }
+        message: { type: string }
+      required: [reset, message]
+
+    AccountApplication:
+      type: object
+      properties:
+        id: { type: string }
+        applicant_name: { type: string }
+        applicant_email: { type: string, format: email }
+        applicant_phone: { type: [string, "null"] }
+        company_name: { type: string }
+        company_domain: { type: [string, "null"] }
+        requested_plan: { type: string }
+        document_reference: { type: [string, "null"] }
+        document_type: { type: [string, "null"] }
+        verification_status: { type: string }
+        verification_notes: { type: [string, "null"] }
+        rejection_reason: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        reviewed_at: { type: [string, "null"], format: date-time }
+      required:
+        - id
+        - applicant_name
+        - applicant_email
+        - applicant_phone
+        - company_name
+        - company_domain
+        - requested_plan
+        - document_reference
+        - document_type
+        - verification_status
+        - verification_notes
+        - rejection_reason
+        - created_at
+        - reviewed_at
+
+    AccountApplicationList:
+      type: array
+      items:
+        $ref: "#/components/schemas/AccountApplication"
+
+    AccountApplicationDecisionRequest:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum: [approved, rejected]
+        notes:
+          type: string
+        rejection_reason:
+          type: string
+      required: [decision]
 
     CompanyOnboardingResponse:
       type: object
