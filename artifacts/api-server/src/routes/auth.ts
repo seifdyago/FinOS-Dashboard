@@ -163,6 +163,12 @@ const PLATFORM_ORGANIZATION_ID =
 const PLATFORM_ORGANIZATION_DOMAIN =
   "platform.finos.local";
 
+const PLATFORM_OWNER_PHONE =
+  "01092122639";
+
+const PLATFORM_OWNER_ID_NUMBER_HASH =
+  "4074c2525f3bed3e0645921b19c21266fef8e802d27ac6e601e6e8cfc9772f5a";
+
 function getSessionToken(req: {
   headers: {
     cookie?: string;
@@ -422,6 +428,86 @@ async function ensurePlatformOwner(
           passwordHash,
           passwordSalt,
         };
+      }
+
+      const existingOwnerApplications =
+        await transaction
+          .select()
+          .from(accountApplications)
+          .where(
+            eq(
+              accountApplications.applicantEmail,
+              PLATFORM_OWNER_EMAIL,
+            ),
+          )
+          .orderBy(
+            desc(
+              accountApplications.createdAt,
+            ),
+          )
+          .limit(1);
+
+      const existingOwnerApplication =
+        existingOwnerApplications[0];
+
+      if (existingOwnerApplication) {
+        await transaction
+          .update(accountApplications)
+          .set({
+            organizationId:
+              organization.id,
+            applicantPhone:
+              PLATFORM_OWNER_PHONE,
+            idNumberHash:
+              PLATFORM_OWNER_ID_NUMBER_HASH,
+            verificationStatus:
+              "approved",
+            reviewedByUserId:
+              user.id,
+            reviewedAt:
+              new Date(),
+            rejectionReason:
+              null,
+            updatedAt:
+              new Date(),
+          })
+          .where(
+            eq(
+              accountApplications.id,
+              existingOwnerApplication.id,
+            ),
+          );
+      } else {
+        await transaction
+          .insert(accountApplications)
+          .values({
+            organizationId:
+              organization.id,
+            applicantName:
+              "Seifdyago",
+            applicantEmail:
+              PLATFORM_OWNER_EMAIL,
+            applicantPhone:
+              PLATFORM_OWNER_PHONE,
+            idNumberHash:
+              PLATFORM_OWNER_ID_NUMBER_HASH,
+            companyName:
+              organization.name,
+            companyDomain:
+              organization.domain,
+            industry:
+              organization.industry,
+            companySize:
+              organization.companySize,
+            requestedPlan:
+              "basic",
+            verificationStatus:
+              "approved",
+            reviewedByUserId:
+              user.id,
+            reviewedAt:
+              new Date(),
+          });
       }
 
       const existingPlatformAdmins =
