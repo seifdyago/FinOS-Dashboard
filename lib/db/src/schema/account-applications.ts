@@ -1,9 +1,22 @@
 import { createInsertSchema } from "drizzle-zod";
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+import { organizations } from "./organizations";
 import { users } from "./users";
 
 export const accountApplications = pgTable("account_applications", {
   id: uuid("id").defaultRandom().primaryKey(),
+
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
 
   applicantName: text("applicant_name").notNull(),
   applicantEmail: text("applicant_email").notNull(),
