@@ -18,6 +18,7 @@ import NotFound from '@/pages/not-found';
 import { PlatformProvider, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
 import { employees } from '@/data/employees';
 import type { Employee } from '@/types/employee';
+import { mapPersistedEmployeesToEmployees } from '@/lib/employee-mapper';
 import { recordActivityEvent, useGetPlatformAnalytics, type RecordActivityEventRequest } from '@workspace/api-client-react';
 import {
   deleteKnowledgeFile,
@@ -243,6 +244,36 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
       return tenant.id === 'orbit-digital' ? employees : [];
     }
   });
+
+  useEffect(() => {
+    let mounted = true;
+    void fetch('/api/employees', {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const payload = await response.json() as { employees?: unknown[] };
+        if (!mounted || !Array.isArray(payload.employees)) return;
+        const persistedEmployees = mapPersistedEmployeesToEmployees(payload.employees as Parameters<typeof mapPersistedEmployeesToEmployees>[0]);
+        setRoster(persistedEmployees.map((employee) => ({
+          ...employee,
+          responsibilities: employee.responsibilities || [],
+          permissions: employee.permissions || ['read:transactions', 'read:customers'],
+          knowledge: employee.knowledge || [],
+          knowledgeSource: employee.knowledgeSource || '',
+          systemPrompt: employee.systemPrompt || '',
+          personality: employee.personality || 'Thoughtful and clear',
+          avatar: employee.avatar || '',
+          manager: employee.manager || 'Workspace admin',
+        })));
+      })
+      .catch(() => {
+        // Local source remains the offline fallback when the authenticated API is unavailable.
+      });
+    return () => { mounted = false; };
+  }, [tenant.id]);
 
   useEffect(() => {
     localStorage.setItem(`finos:${tenant.id}:employees`, JSON.stringify(roster));
