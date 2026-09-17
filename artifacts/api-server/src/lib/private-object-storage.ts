@@ -1,6 +1,17 @@
+import { issueSignedToken, presignUrl } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
+const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
+const MAX_IDENTITY_DOCUMENT_BYTES = 10 * 1024 * 1024;
+const IDENTITY_DOCUMENT_CONTENT_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/octet-stream",
+];
+
+type StorageMethod = "PUT" | "HEAD" | "GET" | "DELETE";
 
 export class PrivateObjectNotFoundError extends Error {
   constructor() {
@@ -11,12 +22,6 @@ export class PrivateObjectNotFoundError extends Error {
 }
 
 export class PrivateObjectStorage {
-  private getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR?.trim();
-    if (!dir) throw new Error("PRIVATE_OBJECT_DIR is not configured.");
-    return dir.replace(/\/+$/, "");
-  }
-
   createObjectPath(organizationId: string): string {
     const safeOrganizationId = organizationId.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
     if (!safeOrganizationId) throw new Error("organizationId is required.");
@@ -27,29 +32,13 @@ export class PrivateObjectStorage {
     return `/objects/uploads/onboarding/${randomUUID()}`;
   }
 
-  private getStoragePath(objectPath: string): string {
-    if (!objectPath.startsWith("/objects/uploads/")) {
-      throw new Error("Invalid private object path.");
-    }
-    const relativePath = objectPath.slice("/objects/".length);
-    return `${this.getPrivateObjectDir()}/${relativePath}`;
-  }
-
   async createUploadUrl(objectPath: string): Promise<string> {
-    return signObjectUrl({
-      storagePath: this.getStoragePath(objectPath),
-      method: "PUT",
-      ttlSec: 900,
-    });
+    return this.createSignedUrl(objectPath, "PUT");
   }
 
   async objectExists(objectPath: string): Promise<boolean> {
     const response = await fetch(
-      await signObjectUrl({
-        storagePath: this.getStoragePath(objectPath),
-        method: "HEAD",
-        ttlSec: 60,
-      }),
+      await this.createSignedUrl(objectPath, "HEAD"),
       { method: "HEAD", signal: AbortSignal.timeout(30_000) },
     );
     return response.ok;
@@ -59,60 +48,59 @@ export class PrivateObjectStorage {
     if (!(await this.objectExists(objectPath))) {
       throw new PrivateObjectNotFoundError();
     }
-    return signObjectUrl({
-      storagePath: this.getStoragePath(objectPath),
-      method: "GET",
-      ttlSec: 300,
-    });
+    return this.createSignedUrl(objectPath, "GET");
   }
 
   async deleteObject(objectPath: string): Promise<void> {
     const response = await fetch(
-      await signObjectUrl({
-        storagePath: this.getStoragePath(objectPath),
-        method: "DELETE",
-        ttlSec: 60,
-      }),
+      await this.createSignedUrl(objectPath, "DELETE"),
       { method: "DELETE", signal: AbortSignal.timeout(30_000) },
     );
     if (!response.ok && response.status !== 404) {
       throw new Error(`Failed to delete private object (${response.status}).`);
     }
   }
+
+  private async createSignedUrl(objectPath: string, method: StorageMethod): Promise<string> {
+    const pathname = toBlobPath(objectPath);
+    const validUntil = Date.now() + SIGNED_URL_TTL_MS;
+    const operation = method.toLowerCase() as "put" | "head" | "get" | "delete";
+    const signedToken = await issueSignedToken({
+      pathname,
+      operations: [operation],
+      validUntil,
+      ...(operation === "put"
+        ? {
+            allowedContentTypes: IDENTITY_DOCUMENT_CONTENT_TYPES,
+            maximumSizeInBytes: MAX_IDENTITY_DOCUMENT_BYTES,
+          }
+        : {}),
+    });
+
+    const { presignedUrl } = await presignUrl(signedToken, {
+      access: "private",
+      pathname,
+      operation,
+      validUntil: signedToken.validUntil,
+      ...(operation === "put"
+        ? {
+            allowedContentTypes: IDENTITY_DOCUMENT_CONTENT_TYPES,
+            maximumSizeInBytes: MAX_IDENTITY_DOCUMENT_BYTES,
+            allowOverwrite: false,
+          }
+        : {}),
+    } as Parameters<typeof presignUrl>[1]);
+
+    return presignedUrl;
+  }
 }
 
-async function signObjectUrl({
-  storagePath,
-  method,
-  ttlSec,
-}: {
-  storagePath: string;
-  method: "GET" | "PUT" | "DELETE" | "HEAD";
-  ttlSec: number;
-}): Promise<string> {
-  const normalizedPath = storagePath.startsWith("/") ? storagePath : `/${storagePath}`;
-  const parts = normalizedPath.split("/");
-  if (parts.length < 3) throw new Error("Invalid object storage path.");
-
-  const response = await fetch(`${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      bucket_name: parts[1],
-      object_name: parts.slice(2).join("/"),
-      method,
-      expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to sign object storage URL (${response.status}).`);
+function toBlobPath(objectPath: string): string {
+  const pathname = objectPath.trim().replace(/^\/+/, "");
+  if (!pathname.startsWith("objects/uploads/") || pathname.endsWith("/")) {
+    throw new Error("Invalid private object path.");
   }
-
-  const body = (await response.json()) as { signed_url?: string };
-  if (!body.signed_url) throw new Error("Storage did not return a signed URL.");
-  return body.signed_url;
+  return pathname;
 }
 
 export const privateObjectStorage = new PrivateObjectStorage();
