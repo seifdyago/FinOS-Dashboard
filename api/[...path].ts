@@ -11,7 +11,7 @@ let appPromise: Promise<ExpressHandler> | undefined;
 
 function loadApp(): Promise<ExpressHandler> {
   appPromise ??= dynamicImport(
-    "../artifacts/api-server/dist/app.mjs",
+    "./server.mjs",
   ).then((module) => module.default);
   return appPromise;
 }
