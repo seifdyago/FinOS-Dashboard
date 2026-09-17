@@ -1,22 +1,4 @@
-let appPromise: Promise<any> | undefined;
+// @ts-expect-error The API server is bundled as an ESM file without TypeScript declarations.
+import app from "./server.mjs";
 
-function loadApp(): Promise<any> {
-  appPromise ??= import("./server.mjs").then(
-    (module) => module.default,
-  );
-  return appPromise;
-}
-
-export default async function handler(req: any, res: any): Promise<void> {
-  try {
-    const app = await loadApp();
-    app(req, res);
-  } catch (error) {
-    console.error("API function startup failed", error);
-    res.status(500).json({
-      error: "api_boot_error",
-      detail:
-        error instanceof Error ? error.message : "Unknown API startup error",
-    });
-  }
-}
+export default app;
