@@ -48,6 +48,11 @@ type BackendSessionResponse = {
   user?: BackendSessionUser;
 };
 
+type PendingRegistration = {
+  companyName: string;
+  email: string;
+};
+
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -1232,6 +1237,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
   const [fullName, setFullName] = useState('');
   const [idDocument, setIdDocument] = useState<File | null>(null);
   const [error, setError] = useState('');
+  const [pendingRegistration, setPendingRegistration] = useState<PendingRegistration | null>(null);
 
   const finishLogin = (user: BackendSessionUser) => {
     const tenant = tenantForBackendUser(user);
@@ -1380,6 +1386,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         return;
       }
       setOnboarding(false);
+      setPendingRegistration({ companyName: companyName.trim(), email: normalizedEmail });
       setStep(1);
       setPassword('');
       setConfirmPassword('');
@@ -1583,6 +1590,20 @@ function Login({ onLogin }: { onLogin: () => void }) {
       {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]">Previous step</button>}
     </>
   );
+
+  if (pendingRegistration) {
+    return <div className="noise flex min-h-[100dvh] items-center justify-center bg-[#07111f] px-5">
+      <div className="w-full max-w-[500px] rounded-2xl border border-[#29465d] bg-[#0d1020] p-7 shadow-2xl">
+        <div className="mb-6 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#173a46] text-[#6fe0bd]"><CheckCircle2 size={20}/></div><div><div className="kicker">Registration received</div><h2 className="display-font text-[28px] font-semibold tracking-[-.04em] text-[#ebf5f7]">Pending security review.</h2></div></div>
+        <div className="rounded-xl border border-[#245166] bg-[#0c2130] p-4 text-sm leading-6 text-[#b4c8d2]">
+          <p><span className="font-semibold text-[#e2e8f0]">{pendingRegistration.companyName}</span> has been submitted for review.</p>
+          <p className="mt-2">We received the registration for <span className="text-[#6fe0bd]">{pendingRegistration.email}</span>. Your workspace and subscription will remain pending until a security administrator completes verification.</p>
+        </div>
+        <div className="mt-5 rounded-lg border border-[#214057] px-3 py-3 text-[11px] leading-5 text-[#7892a5]">You will be able to sign in after the account is approved. No password or identity document contents are displayed here.</div>
+        <button onClick={() => setPendingRegistration(null)} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm" data-testid="button-pending-back-to-login"><ArrowUpRight size={15}/> Back to sign in</button>
+      </div>
+    </div>;
+  }
 
   if (forgotOpen) {
     return <div className="noise flex min-h-[100dvh] items-center justify-center bg-[#07111f] px-5">
