@@ -1,4 +1,3 @@
- // @ts-expect-error The API server is bundled as an ESM file without TypeScript declarations.
-import app from "../artifacts/api-server/dist/app.mjs";
+import app from "../artifacts/api-server/src/app";
 
 export default app;
