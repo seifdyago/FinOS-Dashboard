@@ -60,6 +60,7 @@ export type WorkspaceUser = {
   name: string;
   email: string;
   role: string;
+  platform_admin_role?: string | null;
   initials: string;
   title: string;
   timezone: string;
@@ -217,6 +218,7 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     name: `${tenant.name} Admin`,
     email: `admin@${tenant.domain}`,
     role: 'Workspace admin',
+    platform_admin_role: null,
     initials: `${tenant.initials}A`,
     title: 'Chief Operating Officer',
     timezone: 'Pacific Time (US & Canada)',

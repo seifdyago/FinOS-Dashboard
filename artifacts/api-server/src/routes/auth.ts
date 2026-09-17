@@ -21,6 +21,7 @@ import {
 import {
   createAuthSession,
   getAuthenticatedUser,
+  getPlatformAdminRole,
   revokeAuthSession,
   AUTH_SESSION_COOKIE,
 } from "../lib/auth-session";
@@ -739,6 +740,8 @@ router.post(
           name: user.name,
           role: user.role,
           status: user.status,
+          platform_admin_role:
+            await getPlatformAdminRole(user.email),
         },
         expires_at:
           expiresAt.toISOString(),
@@ -786,6 +789,8 @@ router.get(
           name: user.name,
           role: user.role,
           status: user.status,
+          platform_admin_role:
+            user.platformAdminRole,
         },
       });
     } catch (error) {

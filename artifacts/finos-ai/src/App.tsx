@@ -30,7 +30,6 @@ import {
 
 const queryClient = new QueryClient();
 
-const PLATFORM_OWNER_EMAIL = 'seifdyago@gmail.com';
 const ACTIVE_ACCOUNT_KEY = 'finos-active-account-v2';
 const MERCHANT_CREDENTIALS_KEY = 'finos-merchant-credential-verifiers-v1';
 
@@ -41,6 +40,7 @@ type BackendSessionUser = {
   name: string;
   role: string;
   status: string;
+  platform_admin_role: string | null;
 };
 
 type BackendSessionResponse = {
@@ -52,8 +52,8 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function isPlatformOwner(email: string): boolean {
-  return normalizeEmail(email) === PLATFORM_OWNER_EMAIL;
+function isPlatformOwner(user: { platform_admin_role?: string | null }): boolean {
+  return ['owner', 'admin'].includes((user.platform_admin_role || '').trim().toLowerCase());
 }
 
 async function hashCredential(value: string): Promise<string> {
@@ -367,7 +367,7 @@ function TinyBars({ color = '#8b5cf6' }: { color?: string }) {
 function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }) {
   const { employees: roster } = useEmployees();
   const platform = usePlatform();
-  const isOwner = isPlatformOwner(platform.user.email);
+  const isOwner = isPlatformOwner(platform.user);
   const navGroups = useMemo(() => getNavGroups(isOwner), [isOwner]);
   const [location, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -992,7 +992,7 @@ function DataPageV2({ kind }: { kind: 'transactions' | 'customers' | 'merchants'
   const [selected, setSelected] = useState<TransactionRecord | CustomerRecord | MerchantRecord | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const pageSize = 5;
-  if (kind === 'merchants' && !isPlatformOwner(platform.user.email)) return <NotFound />;
+  if (kind === 'merchants' && !isPlatformOwner(platform.user)) return <NotFound />;
   const rows = kind === 'transactions' ? platform.transactions : kind === 'customers' ? platform.customers : platform.merchants;
   const matches = (row: TransactionRecord | CustomerRecord | MerchantRecord) => {
     const text = JSON.stringify(row).toLowerCase();
@@ -1242,6 +1242,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
       name: user.name,
       email: user.email,
       role: user.role,
+      platform_admin_role: user.platform_admin_role,
       initials,
       title: user.role,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -1279,7 +1280,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         return;
       }
       finishLogin(user);
-      if (!isPlatformOwner(user.email)) {
+      if (!isPlatformOwner(user)) {
         reportWorkspaceActivity(user.organization_id, user.email, {
           event_type: 'login',
           metadata: { method: 'email_password' },
@@ -1929,7 +1930,7 @@ function PlatformAdminPage() {
 function AppRouter({onLogout}:{onLogout:()=>void}) {
   const { employees: roster } = useEmployees();
   const { user } = usePlatform();
-  const owner = isPlatformOwner(user.email);
+  const owner = isPlatformOwner(user);
   return <Shell onLogout={onLogout}><Switch><Route path="/" component={Dashboard}/><Route path="/platform-admin" component={PlatformAdminPage}/><Route path="/ai-employees" component={AIDirectory}/><Route path="/ai-employees/builder" component={EmployeeBuilderPage}/>{roster.map((employee) => <Route key={`${employee.id}-details`} path={`/ai-employees/${employee.id}/details`} component={() => <EmployeeDetailsPage employee={employee}/>}/>)}{roster.map((employee) => <Route key={employee.id} path={`/ai-employees/${employee.id}`} component={() => <AIWorkspace employee={employee}/>}/>)}<Route path="/transactions" component={() => <DataPageV2 kind="transactions"/>}/><Route path="/customers" component={() => <DataPageV2 kind="customers"/>}/>{owner && <Route path="/merchants" component={() => <DataPageV2 kind="merchants"/>}/>}<Route path="/reports" component={ReportsV2}/><Route path="/analytics" component={AnalyticsV2}/><Route path="/knowledge" component={CompanyKnowledgePage}/><Route path="/integrations" component={IntegrationsPage}/><Route path="/email" component={EmailCenterPage}/><Route path="/assistant" component={AssistantPage}/><Route path="/profile" component={ProfilePage}/><Route path="/notifications" component={NotificationsPage}/><Route path="/settings" component={SettingsV2}/><Route component={NotFound}/></Switch></Shell>;
 }
 
@@ -1951,6 +1952,7 @@ function Root() {
             name: session.user.name,
             email: session.user.email,
             role: session.user.role,
+            platform_admin_role: session.user.platform_admin_role,
             initials: session.user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
             title: session.user.role,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,

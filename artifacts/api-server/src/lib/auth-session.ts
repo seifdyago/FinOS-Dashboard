@@ -6,6 +6,7 @@ import {
 import {
   authSessions,
   db,
+  platformAdmins,
   users,
 } from "@workspace/db";
 
@@ -26,7 +27,20 @@ export type AuthenticatedUser = {
   name: string;
   role: string;
   status: string;
+  platformAdminRole: string | null;
 };
+
+export async function getPlatformAdminRole(
+  email: string,
+): Promise<string | null> {
+  const rows = await db
+    .select({ role: platformAdmins.role })
+    .from(platformAdmins)
+    .where(eq(platformAdmins.userId, email.trim().toLowerCase()))
+    .limit(1);
+
+  return rows[0]?.role ?? null;
+}
 
 export async function createAuthSession(
   userId: string,
@@ -71,12 +85,17 @@ export async function getAuthenticatedUser(
       name: users.name,
       role: users.role,
       status: users.status,
+      platformAdminRole: platformAdmins.role,
       expiresAt: authSessions.expiresAt,
     })
     .from(authSessions)
     .innerJoin(
       users,
       eq(authSessions.userId, users.id),
+    )
+    .leftJoin(
+      platformAdmins,
+      eq(platformAdmins.userId, users.email),
     )
     .where(
       eq(
@@ -129,6 +148,7 @@ export async function getAuthenticatedUser(
     name: session.name,
     role: session.role,
     status: session.status,
+    platformAdminRole: session.platformAdminRole,
   };
 }
 
