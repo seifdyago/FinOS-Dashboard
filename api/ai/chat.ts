@@ -5,12 +5,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { setTimeout as delay } from "node:timers/promises";
 import { createHash } from "node:crypto";
 import { and, eq } from "../../lib/db/node_modules/drizzle-orm";
-import { db } from "../../lib/db/src/index.js";
-import { authSessions } from "../../lib/db/src/schema/auth-sessions.js";
-import { employees } from "../../lib/db/src/schema/employees.js";
-import { subscriptions } from "../../lib/db/src/schema/subscriptions.js";
-import { users } from "../../lib/db/src/schema/users.js";
-import { createSubscriptionAccess } from "../../artifacts/api-server/src/lib/subscription-access.js";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -77,6 +71,14 @@ function hashSessionToken(token: string): string {
 }
 
 async function getScopedEmployee(req: any, employeeKey: string) {
+  const [{ db }, { authSessions }, { employees }, { subscriptions }, { users }, { createSubscriptionAccess }] = await Promise.all([
+    import("../../lib/db/src/index.js"),
+    import("../../lib/db/src/schema/auth-sessions.js"),
+    import("../../lib/db/src/schema/employees.js"),
+    import("../../lib/db/src/schema/subscriptions.js"),
+    import("../../lib/db/src/schema/users.js"),
+    import("../../artifacts/api-server/src/lib/subscription-access.js"),
+  ]);
   const token = getSessionToken(req.headers?.cookie);
   if (!token) return { error: "Authentication required.", status: 401 } as const;
   const [session] = await db
