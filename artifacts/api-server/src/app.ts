@@ -31,4 +31,8 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
+// Vercel catch-all functions may strip the /api prefix before invoking this
+// Express app. Keep the normal mount above and accept that serverless shape.
+app.use(router);
+
 export default app;
