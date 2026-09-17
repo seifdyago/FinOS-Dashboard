@@ -4,7 +4,7 @@
   "outputDirectory": "artifacts/finos-ai/dist/public",
   "functions": {
     "api/[...path].ts": {
-      "includeFiles": ["api/server.mjs"]
+      "includeFiles": "api/server.mjs"
     }
   },
   "routes": [
