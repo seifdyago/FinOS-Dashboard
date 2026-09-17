@@ -6,7 +6,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import { createHash } from "node:crypto";
 import { and, eq } from "../../lib/db/node_modules/drizzle-orm";
 import { db } from "../../lib/db/src";
-import { authSessions, employees, subscriptions, users } from "../../lib/db/src/schema/index";
+import { authSessions } from "../../lib/db/src/schema/auth-sessions";
+import { employees } from "../../lib/db/src/schema/employees";
+import { subscriptions } from "../../lib/db/src/schema/subscriptions";
+import { users } from "../../lib/db/src/schema/users";
 import { createSubscriptionAccess } from "../../artifacts/api-server/src/lib/subscription-access";
 
 declare const process: {
