@@ -1,4 +1,25 @@
-// @ts-expect-error The API server is bundled as an ESM file without TypeScript declarations.
-import app from "./server.mjs";
+type ExpressHandler = (req: any, res: any) => any;
 
-export default app;
+type DynamicImport = (specifier: string) => Promise<{ default: ExpressHandler }>;
+
+const dynamicImport = new Function(
+  "specifier",
+  "return import(specifier)",
+) as DynamicImport;
+
+let appPromise: Promise<ExpressHandler> | undefined;
+
+function loadApp(): Promise<ExpressHandler> {
+  appPromise ??= dynamicImport(
+    "../artifacts/api-server/dist/app.mjs",
+  ).then((module) => module.default);
+  return appPromise;
+}
+
+export default async function handler(
+  req: any,
+  res: any,
+): Promise<void> {
+  const app = await loadApp();
+  app(req, res);
+}
