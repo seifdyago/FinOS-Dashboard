@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "node artifacts/api-server/build.mjs && pnpm --filter @workspace/finos-ai build",
+  "buildCommand": "pnpm --filter @workspace/db push && node artifacts/api-server/build.mjs && pnpm --filter @workspace/finos-ai build",
   "outputDirectory": "artifacts/finos-ai/dist/public",
   "functions": {
     "api/[...path].ts": {
