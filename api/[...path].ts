@@ -1,10 +1,8 @@
-import type { RequestHandler } from "express";
+let appPromise: Promise<any> | undefined;
 
-let appPromise: Promise<RequestHandler> | undefined;
-
-function loadApp(): Promise<RequestHandler> {
+function loadApp(): Promise<any> {
   appPromise ??= import("./server.mjs").then(
-    (module) => module.default as RequestHandler,
+    (module) => module.default,
   );
   return appPromise;
 }
