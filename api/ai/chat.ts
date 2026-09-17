@@ -3,6 +3,10 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { setTimeout as delay } from "node:timers/promises";
+import { createHash } from "node:crypto";
+import { and, eq } from "../../lib/db/node_modules/drizzle-orm";
+import { authSessions, db, employees, subscriptions, users } from "../../lib/db/src";
+import { createSubscriptionAccess } from "../../artifacts/api-server/src/lib/subscription-access";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -52,6 +56,50 @@ function decodeBase64Text(data: string): string {
   } catch {
     return "";
   }
+}
+
+const AUTH_SESSION_COOKIE = "finos_session";
+
+function getSessionToken(cookieHeader: string | undefined): string | undefined {
+  return cookieHeader
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${AUTH_SESSION_COOKIE}=`))
+    ?.slice(`${AUTH_SESSION_COOKIE}=`.length);
+}
+
+function hashSessionToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function getScopedEmployee(req: any, employeeKey: string) {
+  const token = getSessionToken(req.headers?.cookie);
+  if (!token) return { error: "Authentication required.", status: 401 } as const;
+  const [session] = await db
+    .select({ organizationId: users.organizationId, userStatus: users.status, expiresAt: authSessions.expiresAt })
+    .from(authSessions)
+    .innerJoin(users, eq(authSessions.userId, users.id))
+    .where(eq(authSessions.sessionTokenHash, hashSessionToken(token)))
+    .limit(1);
+  if (!session || session.expiresAt.getTime() <= Date.now() || session.userStatus !== "active") {
+    return { error: "Authentication required.", status: 401 } as const;
+  }
+  const [subscription] = await db
+    .select({ plan: subscriptions.plan, status: subscriptions.status })
+    .from(subscriptions)
+    .where(eq(subscriptions.organizationId, session.organizationId))
+    .limit(1);
+  const [employee] = await db
+    .select()
+    .from(employees)
+    .where(and(eq(employees.organizationId, session.organizationId), eq(employees.employeeKey, employeeKey.trim())))
+    .limit(1);
+  if (!employee) return { error: "Employee not found.", status: 404 } as const;
+  const access = createSubscriptionAccess(subscription);
+  if (!access.canAccessEmployee(employee)) {
+    return { error: "This employee is not included in the current subscription.", status: 403 } as const;
+  }
+  return { employee } as const;
 }
 
 function buildAttachmentParts(attachments: ChatAttachment[]) {
@@ -114,11 +162,17 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    if (!employee) {
+    if (!employee || typeof employee.id !== "string") {
       return res.status(400).json({
         error: "Employee information is required.",
       });
     }
+
+    const scopedEmployee = await getScopedEmployee(req, employee.id);
+    if ("error" in scopedEmployee) {
+      return res.status(scopedEmployee.status).json({ error: scopedEmployee.error });
+    }
+    const persistedEmployee = scopedEmployee.employee;
 
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -134,18 +188,14 @@ export default async function handler(req: any, res: any) {
       model: "gemini-3.6-flash",
     });
 
-    const employeeName = employee.name || "FinOS AI Employee";
-    const employeeRole = employee.role || "AI Assistant";
-    const employeeDepartment = employee.department || "FinOS";
-    const personality = employee.personality || "Professional, intelligent, helpful, natural, and human-like.";
-    const systemPrompt = employee.systemPrompt || employee.prompt || "You are a professional AI employee working for FinOS.";
-    const skills = Array.isArray(employee.skills) ? employee.skills.join(", ") : "";
-    const responsibilities = Array.isArray(employee.responsibilities) ? employee.responsibilities.join(", ") : "";
-    const knowledge = Array.isArray(employee.knowledge)
-      ? employee.knowledge.join(", ")
-      : typeof employee.knowledge === "string"
-        ? employee.knowledge
-        : "";
+    const employeeName = persistedEmployee.name || "FinOS AI Employee";
+    const employeeRole = persistedEmployee.role || "AI Assistant";
+    const employeeDepartment = persistedEmployee.department || "FinOS";
+    const personality = persistedEmployee.personality || "Professional, intelligent, helpful, natural, and human-like.";
+    const systemPrompt = persistedEmployee.systemPrompt || "You are a professional AI employee working for FinOS.";
+    const skills = persistedEmployee.skills.join(", ");
+    const responsibilities = persistedEmployee.responsibilities.join(", ");
+    const knowledge = persistedEmployee.knowledge.join(", ");
 
     const conversationItems = Array.isArray(conversation) && conversation.length > 0
       ? conversation
@@ -294,7 +344,7 @@ Respond naturally as ${employeeName}.
       success: true,
       reply: reply || "I apologize, but I could not generate a response right now.",
       employee: {
-        id: employee.id || null,
+        id: persistedEmployee.employeeKey,
         name: employeeName,
         role: employeeRole,
       },
