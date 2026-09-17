@@ -9,6 +9,10 @@
   },
   "routes": [
     {
+      "src": "/api/ai/chat",
+      "dest": "/api/ai/chat.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/[...path].ts"
     },
