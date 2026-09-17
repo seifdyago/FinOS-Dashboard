@@ -56971,16 +56971,7 @@ var accountApplicationsRelations = relations(
 
 // lib/db/src/index.ts
 var { Pool: Pool3 } = esm_default;
-var databaseUrlConfig = [
-  ["DATABASE_URL", process.env.DATABASE_URL],
-  ["POSTGRES_URL", process.env.POSTGRES_URL],
-  ["POSTGRES_PRISMA_URL", process.env.POSTGRES_PRISMA_URL],
-  ["POSTGRES_URL_NON_POOLING", process.env.POSTGRES_URL_NON_POOLING],
-  ["NEON_DATABASE_URL", process.env.NEON_DATABASE_URL],
-  ["DATABASE_URL_UNPOOLED", process.env.DATABASE_URL_UNPOOLED]
-].find(([, value]) => Boolean(value));
-var databaseUrlSource = databaseUrlConfig?.[0] ?? null;
-var databaseUrl = databaseUrlConfig?.[1];
+var databaseUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL_NON_POOLING ?? process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL_UNPOOLED;
 var hasDatabaseUrl = Boolean(databaseUrl);
 var pool = new Pool3({
   connectionString: databaseUrl ?? "postgresql://unconfigured:unconfigured@127.0.0.1:1/unconfigured"
@@ -56991,25 +56982,15 @@ var db = drizzle(pool, { schema: schema_exports });
 var router = (0, import_express.Router)();
 router.get("/healthz", async (_req, res) => {
   if (!hasDatabaseUrl) {
-    res.status(503).json({
-      status: "error",
-      database: "not_configured",
-      databaseUrlSource
-    });
+    res.status(503).json({ status: "error", database: "not_configured" });
     return;
   }
   try {
     await pool.query("select 1");
     const data = HealthCheckResponse.parse({ status: "ok" });
     res.json({ ...data, database: "ok" });
-  } catch (error40) {
-    const code = error40 && typeof error40 === "object" && "code" in error40 ? String(error40.code) : "unknown";
-    res.status(503).json({
-      status: "error",
-      database: "unreachable",
-      databaseUrlSource,
-      errorCode: code
-    });
+  } catch {
+    res.status(503).json({ status: "error", database: "unreachable" });
   }
 });
 var health_default = router;
