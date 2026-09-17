@@ -3,7 +3,7 @@ import {
   getSubscriptionPlan,
   type SubscriptionLike,
   type SubscriptionPlanId,
-} from "./subscription-plans";
+} from "./subscription-plans.js";
 
 export type EmployeeAccessSubject = Pick<EmployeeRecord, "employeeKey" | "role" | "department" | "permissions">;
 

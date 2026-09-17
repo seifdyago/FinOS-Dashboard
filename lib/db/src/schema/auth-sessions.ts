@@ -5,7 +5,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { users } from "./users";
+import { users } from "./users.js";
 
 export const authSessions = pgTable("auth_sessions", {
   id: uuid("id").defaultRandom().primaryKey(),

@@ -1,6 +1,6 @@
 import { createInsertSchema } from "drizzle-zod";
 import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { organizations } from "./organizations";
+import { organizations } from "./organizations.js";
 
 export const usageMetrics = pgTable(
   "usage_metrics",

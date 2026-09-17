@@ -1,8 +1,8 @@
 import { createInsertSchema } from "drizzle-zod";
 import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { organizations } from "./organizations";
-import { employees } from "./employees";
-import { users } from "./users";
+import { organizations } from "./organizations.js";
+import { employees } from "./employees.js";
+import { users } from "./users.js";
 
 export const knowledgeDocuments = pgTable(
   "knowledge_documents",

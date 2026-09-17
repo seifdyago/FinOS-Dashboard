@@ -1,7 +1,7 @@
 import { createInsertSchema } from "drizzle-zod";
 import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { organizations } from "./organizations";
-import { users } from "./users";
+import { organizations } from "./organizations.js";
+import { users } from "./users.js";
 
 export const activityEvents = pgTable(
   "activity_events",

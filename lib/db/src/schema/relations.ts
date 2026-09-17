@@ -1,13 +1,13 @@
 import { relations } from "drizzle-orm";
-import { organizations } from "./organizations";
-import { users } from "./users";
-import { departments } from "./departments";
-import { employees } from "./employees";
-import { subscriptions } from "./subscriptions";
-import { knowledgeDocuments } from "./knowledge-documents";
-import { activityEvents } from "./activity-events";
-import { usageMetrics } from "./usage-metrics";
-import { accountApplications } from "./account-applications";
+import { organizations } from "./organizations.js";
+import { users } from "./users.js";
+import { departments } from "./departments.js";
+import { employees } from "./employees.js";
+import { subscriptions } from "./subscriptions.js";
+import { knowledgeDocuments } from "./knowledge-documents.js";
+import { activityEvents } from "./activity-events.js";
+import { usageMetrics } from "./usage-metrics.js";
+import { accountApplications } from "./account-applications.js";
 
 export const organizationsRelations = relations(organizations, ({ many, one }) => ({
   users: many(users),

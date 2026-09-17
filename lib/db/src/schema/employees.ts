@@ -10,8 +10,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { organizations } from "./organizations";
-import { departments } from "./departments";
+import { organizations } from "./organizations.js";
+import { departments } from "./departments.js";
 
 export const employees = pgTable(
   "employees",
