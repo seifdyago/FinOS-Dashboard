@@ -5,7 +5,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { setTimeout as delay } from "node:timers/promises";
 import { createHash } from "node:crypto";
 import { and, eq } from "../../lib/db/node_modules/drizzle-orm";
-import { authSessions, db, employees, subscriptions, users } from "../../lib/db/src";
+import { db } from "../../lib/db/src";
+import { authSessions, employees, subscriptions, users } from "../../lib/db/src/schema/index";
 import { createSubscriptionAccess } from "../../artifacts/api-server/src/lib/subscription-access";
 
 declare const process: {
