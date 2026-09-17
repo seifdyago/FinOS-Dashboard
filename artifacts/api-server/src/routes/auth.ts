@@ -13,6 +13,7 @@ import {
   platformAdmins,
   authSessions,
   users,
+  subscriptions,
   accountApplications,
   passwordResetTokens,
   passwordResetRateLimits,
@@ -549,6 +550,44 @@ async function ensurePlatformOwner(
               existingPlatformAdmin.id,
             ),
           );
+      }
+
+      const existingSubscriptions =
+        await transaction
+          .select()
+          .from(subscriptions)
+          .where(
+            eq(
+              subscriptions.organizationId,
+              organization.id,
+            ),
+          )
+          .limit(1);
+
+      if (existingSubscriptions[0]) {
+        await transaction
+          .update(subscriptions)
+          .set({
+            plan: "basic",
+            status: "active",
+            priceCents: 100_000,
+            updatedAt: new Date(),
+          })
+          .where(
+            eq(
+              subscriptions.id,
+              existingSubscriptions[0].id,
+            ),
+          );
+      } else {
+        await transaction
+          .insert(subscriptions)
+          .values({
+            organizationId: organization.id,
+            plan: "basic",
+            status: "active",
+            priceCents: 100_000,
+          });
       }
 
       return {
