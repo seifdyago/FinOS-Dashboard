@@ -262,6 +262,28 @@ router.post("/platform-admin/organizations/:organizationId/status", async (req, 
         .update(users)
         .set({ status, updatedAt: new Date() })
         .where(eq(users.organizationId, organizationId));
+      await transaction
+        .update(subscriptions)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(subscriptions.organizationId, organizationId));
+      if (status === "active") {
+        await transaction
+          .update(accountApplications)
+          .set({
+            verificationStatus: "approved",
+            verificationNotes: "Approved through the authenticated platform-owner Activate workflow.",
+            rejectionReason: null,
+            reviewedByUserId: admin.userId,
+            reviewedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(accountApplications.id, organizationId),
+              eq(accountApplications.verificationStatus, "pending_review"),
+            ),
+          );
+      }
       await transaction.insert(activityEvents).values({
         organizationId,
         eventType: status === "active" ? "organization_reactivated" : "organization_suspended",
