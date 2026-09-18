@@ -1,4 +1,4 @@
-import { head, issueSignedToken, presignUrl } from "@vercel/blob";
+import { issueSignedToken, presignUrl } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
@@ -57,28 +57,22 @@ export class PrivateObjectStorage {
   }
 
   async objectExists(objectPath: string): Promise<boolean> {
-    const pathname = toBlobPath(objectPath);
-    const oidcToken = process.env.VERCEL_OIDC_TOKEN?.trim();
-    const storeId = process.env.BLOB_STORE_ID?.trim();
-    const readWriteToken = process.env.BLOB_READ_WRITE_TOKEN?.trim();
-    const retryDelaysMs = [0, 150, 350, 700, 1_200];
+    toBlobPath(objectPath);
+    const retryDelaysMs = [0, 250, 750, 1_500, 3_000, 5_000];
 
     for (const delayMs of retryDelaysMs) {
       if (delayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
       try {
-        await head(pathname, {
-          ...(oidcToken && storeId
-            ? { oidcToken, storeId }
-            : readWriteToken
-              ? { token: readWriteToken }
-              : {}),
-          abortSignal: AbortSignal.timeout(30_000),
+        const downloadUrl = await this.createSignedUrl(objectPath, "GET");
+        const response = await fetch(downloadUrl, {
+          method: "GET",
+          signal: AbortSignal.timeout(30_000),
         });
-        return true;
+        if (response.ok) return true;
       } catch {
-        // A successful PUT can take a short interval to become visible to HEAD.
+        // A successful PUT can take a short interval to become visible to a signed read.
       }
     }
     return false;
