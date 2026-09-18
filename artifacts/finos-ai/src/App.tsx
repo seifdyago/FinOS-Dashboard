@@ -1679,13 +1679,13 @@ function Login({ onLogin }: { onLogin: () => void }) {
         </div>
       </div>
       <div className="flex flex-1 items-center justify-center px-6 py-10">
-        <div className="w-full max-w-[390px]">
+        <div className="login-card w-full max-w-[410px]">
           <div className="mb-10 lg:hidden"><Logo /></div>
           {onboarding ? onboardingPanel : (
             <>
-              <div className="kicker mb-3">Welcome back</div>
+              <div className="mb-3 flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#5bd7e7] shadow-[0_0_14px_rgba(91,215,231,.8)]"/><span className="kicker">Secure workspace access</span></div>
               <h2 className="display-font text-[30px] font-semibold tracking-[-.04em] text-[#ebf5f7]">Sign in to your workspace.</h2>
-              <p className="mt-2 text-[13px] text-[#8299ad]">Email and password are required for every workspace.</p>
+              <p className="mt-2 text-[13px] leading-6 text-[#8299ad]">Sign in to your company workspace to manage operations, people, and AI activity.</p>
               <div className="mt-8 space-y-4">
                 <label className="block"><span className="kicker mb-2 block">Email</span><input autoFocus value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@company.com" className={fieldClass} data-testid="input-login-email"/></label>
                 <label className="block"><span className="kicker mb-2 block">Password</span><input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Your password" className={fieldClass} onKeyDown={(event) => event.key === 'Enter' && void enter()} data-testid="input-login-password"/></label>
