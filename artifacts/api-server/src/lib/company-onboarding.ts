@@ -104,6 +104,23 @@ function isUniqueViolation(error: unknown): boolean {
   return code === "23505";
 }
 
+function getDatabaseErrorDetails(error: unknown): Record<string, unknown> {
+  if (typeof error !== "object" || error === null) {
+    return { message: String(error) };
+  }
+
+  const record = error as Record<string, unknown>;
+  return {
+    name: typeof record.name === "string" ? record.name : undefined,
+    message: typeof record.message === "string" ? record.message : undefined,
+    code: typeof record.code === "string" ? record.code : undefined,
+    constraint:
+      typeof record.constraint === "string" ? record.constraint : undefined,
+    table: typeof record.table === "string" ? record.table : undefined,
+    column: typeof record.column === "string" ? record.column : undefined,
+  };
+}
+
 export async function createCompanyOnboarding(
   input: CompanyOnboardingInput,
 ): Promise<CompanyOnboardingResult> {
@@ -312,6 +329,11 @@ export async function createCompanyOnboarding(
       },
     );
   } catch (error) {
+    console.error(
+      "[onboarding] company workspace creation failed",
+      getDatabaseErrorDetails(error),
+    );
+
     /*
      * The organization domain is unique.
      *
