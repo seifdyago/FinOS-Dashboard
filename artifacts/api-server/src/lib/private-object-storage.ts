@@ -65,10 +65,18 @@ export class PrivateObjectStorage {
     const pathname = toBlobPath(objectPath);
     const validUntil = Date.now() + SIGNED_URL_TTL_MS;
     const operation = method.toLowerCase() as "put" | "head" | "get" | "delete";
+    const oidcToken = process.env.VERCEL_OIDC_TOKEN?.trim();
+    const storeId = process.env.BLOB_STORE_ID?.trim();
+    const readWriteToken = process.env.BLOB_READ_WRITE_TOKEN?.trim();
     const signedToken = await issueSignedToken({
       pathname,
       operations: [operation],
       validUntil,
+      ...(oidcToken && storeId
+        ? { oidcToken, storeId }
+        : readWriteToken
+          ? { token: readWriteToken }
+          : {}),
       ...(operation === "put"
         ? {
             allowedContentTypes: IDENTITY_DOCUMENT_CONTENT_TYPES,
