@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
+import { hashPassword } from "../lib/password-auth";
 import {
   accountApplications,
   activityEvents,
@@ -22,12 +23,57 @@ import {
   PlatformAdminRequestError,
   requirePlatformAdminRequestContext,
 } from "../lib/platform-admin-context";
-import { AUTH_SESSION_COOKIE, getAuthenticatedUser } from "../lib/auth-session";
+import { AUTH_SESSION_COOKIE, getAuthenticatedUser, revokeAllUserSessions } from "../lib/auth-session";
 import { getPlatformAnalytics } from "../lib/platform-analytics-service";
 
 const router: IRouter = Router();
 
 const PREMIUM_PRICE_CENTS = 200_000;
+
+router.post("/platform-admin/users/password", async (req, res): Promise<void> => {
+  const adminEmail = req.header("x-finos-platform-admin-email")?.trim().toLowerCase();
+  const sessionCookie = req.headers.cookie?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${AUTH_SESSION_COOKIE}=`));
+  const sessionToken = sessionCookie ? decodeURIComponent(sessionCookie.slice(`${AUTH_SESSION_COOKIE}=`.length)) : undefined;
+  const targetEmail = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const temporaryPassword = typeof req.body?.temporary_password === "string" ? req.body.temporary_password : "";
+  if (!adminEmail || !targetEmail || temporaryPassword.length < 8) {
+    res.status(400).json({ error: "Admin identity, target email, and a password of at least 8 characters are required." });
+    return;
+  }
+  try {
+    const admin = await requirePlatformAdminRequestContext(req);
+    const authenticatedAdmin = await getAuthenticatedUser(sessionToken);
+    if (!authenticatedAdmin || authenticatedAdmin.email.trim().toLowerCase() !== adminEmail || !["owner", "admin"].includes((authenticatedAdmin.platformAdminRole || "").trim().toLowerCase())) {
+      res.status(403).json({ error: "An authenticated platform admin session is required." });
+      return;
+    }
+    const matchingUsers = await db.select({ id: users.id, email: users.email, organizationId: users.organizationId }).from(users).where(eq(users.email, targetEmail));
+    if (matchingUsers.length !== 1) {
+      res.status(matchingUsers.length > 1 ? 409 : 404).json({ error: matchingUsers.length > 1 ? "The target email belongs to multiple workspaces." : "User account not found." });
+      return;
+    }
+    const target = matchingUsers[0];
+    const verifier = hashPassword(temporaryPassword);
+    await db.transaction(async (transaction) => {
+      await transaction.update(users).set({ passwordHash: verifier.hash, passwordSalt: verifier.salt, updatedAt: new Date() }).where(eq(users.id, target.id));
+      await transaction.insert(activityEvents).values({
+        organizationId: target.organizationId,
+        userId: target.id,
+        eventType: "password_reset_by_platform_admin",
+        metadata: { changed_by_platform_admin: admin.userId, target_email: target.email, reason: "manual_account_recovery" },
+      });
+    });
+    await revokeAllUserSessions(target.id);
+    res.json({ updated: true, user_email: target.email, sessions_revoked: true });
+  } catch (error) {
+    if (error instanceof PlatformAdminRequestError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    req.log.error({ error, targetEmail }, "Platform admin password reset failed");
+    res.status(500).json({ error: "Unable to change the user password." });
+  }
+});
 
 function applicationResponse(application: typeof accountApplications.$inferSelect) {
   return {
