@@ -1901,6 +1901,7 @@ function formatPlatformBytes(bytes: number): string {
 function PlatformAdminPage() {
   const { user } = usePlatform();
   const adminEmail = user.email.trim().toLowerCase();
+  const [upgradingOrganizationId, setUpgradingOrganizationId] = useState<string | null>(null);
   const analyticsQuery = useGetPlatformAnalytics({
     request: {
       headers: { 'x-finos-platform-admin-email': adminEmail },
@@ -1914,44 +1915,49 @@ function PlatformAdminPage() {
     return <div className="mx-auto max-w-[1450px]"><SectionHeader eyebrow="Platform owner" title="Loading platform analytics." description="Checking the platform owner scope and preparing the company portfolio."/><div className="panel flex min-h-[320px] items-center justify-center text-sm text-[#7892a5]"><RefreshCw size={16} className="mr-2 animate-spin text-[#8b5cf6]"/> Loading aggregate metrics...</div></div>;
   }
 
-  const fallbackCompanies = [{
-    id: 'current-workspace',
-    name: 'Current workspace',
-    registration_date: new Date().toISOString(),
-    subscription_plan: 'premium',
-    subscription_status: 'active',
-    monthly_price_cents: 0,
-    user_count: 1,
-    ai_employee_count: 0,
-    knowledge_file_count: 0,
-    storage_bytes: 0,
-    last_activity: new Date().toISOString(),
-    status: 'active',
-  }];
   const fallbackSummary = {
-    total_companies: 1,
-    subscribed_companies: 1,
+    total_companies: 0,
+    subscribed_companies: 0,
     monthly_expected_revenue_cents: 0,
     basic_subscriptions: 0,
-    premium_subscriptions: 1,
-    active_users: 1,
+    premium_subscriptions: 0,
+    active_users: 0,
     total_storage_bytes: 0,
     total_knowledge_files: 0,
     total_ai_conversations: 0,
     total_ai_requests: 0,
     total_responses: 0,
-    companies_registered_last_30_days: 1,
+    companies_registered_last_30_days: 0,
     total_employees: 0,
   };
   const summary = analytics?.summary || fallbackSummary;
-  const companies = analytics?.companies || fallbackCompanies;
+  const companies = analytics?.companies || [];
   const recentActivity = analytics?.recent_activity || [];
   const analyticsUnavailable = Boolean(analyticsQuery.isError || !analytics);
   const activeCompanies = companies.filter((company) => company.status.toLowerCase() === 'active').length;
   const activeSubscriptionRate = summary.total_companies ? Math.round((summary.subscribed_companies / summary.total_companies) * 100) : 0;
 
+  const upgradeToPremium = async (organizationId: string, organizationName: string) => {
+    if (!window.confirm(`Upgrade ${organizationName} to Premium? This changes the live subscription entitlement.`)) return;
+    setUpgradingOrganizationId(organizationId);
+    try {
+      const response = await fetch(`/api/platform-admin/organizations/${encodeURIComponent(organizationId)}/upgrade-premium`, {
+        method: 'POST',
+        headers: { 'x-finos-platform-admin-email': adminEmail, Accept: 'application/json' },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to upgrade this organization.');
+      toast.success(`${organizationName} is now Premium.`);
+      await analyticsQuery.refetch();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to upgrade this organization.');
+    } finally {
+      setUpgradingOrganizationId(null);
+    }
+  };
+
   return <div className="mx-auto max-w-[1450px]">
-    <SectionHeader eyebrow="Platform owner / portfolio intelligence" title="The company network, in view." description="A read-only operating picture across every FinOS company, with subscriptions, usage, activity, and growth kept outside customer workspace scope." action={<button onClick={() => void analyticsQuery.refetch()} disabled={analyticsQuery.isFetching} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" data-testid="button-refresh-platform-analytics"><RefreshCw size={13} className={analyticsQuery.isFetching ? 'animate-spin' : ''}/> Refresh portfolio</button>}/>
+    <SectionHeader eyebrow="Platform owner / portfolio intelligence" title="The company network, in view." description="Manage live organization subscriptions with an auditable, owner-only workflow." action={<button onClick={() => void analyticsQuery.refetch()} disabled={analyticsQuery.isFetching} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" data-testid="button-refresh-platform-analytics"><RefreshCw size={13} className={analyticsQuery.isFetching ? 'animate-spin' : ''}/> Refresh portfolio</button>}/>
     {analyticsUnavailable && <div className="mb-6 rounded-xl border border-[#6d3840] bg-[#241923] px-4 py-3 text-[11px] leading-5 text-[#d7a7a8]">Platform API analytics are unavailable right now. The page remains open and is showing the local workspace fallback; connect the backend platform analytics endpoint to see the full company portfolio.</div>}
     <div className="mb-6 flex items-center gap-3 rounded-xl border border-[#3a2a6a] bg-[#0c2130] px-4 py-3 text-[12px]"><span className="live-dot h-2 w-2 rounded-full bg-[#34d399]"/><span className="text-[#c3dbe3]">Platform scope verified</span><span className="text-[#718da1]">鈥�</span><span className="text-[#7e9aad]">Analytics are aggregated from organization-owned records</span><span className="mono ml-auto hidden text-[10px] text-[#5f8194] md:block">{adminEmail}</span></div>
     <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1971,7 +1977,7 @@ function PlatformAdminPage() {
       </div>
        <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">Usage foundation</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">AI workforce signals</div></div><Bot size={18} className="text-[#8b5cf6]"/></div><div className="space-y-4"><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">Conversations</span><span className="mono text-[#d9e9ee]">{summary.total_ai_conversations.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#8b5cf6]" style={{ width: `${Math.min(summary.total_ai_conversations ? 100 : 0, 100)}%` }}/></div></div><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">AI requests</span><span className="mono text-[#d9e9ee]">{summary.total_ai_requests.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#34d399]" style={{ width: `${Math.min(summary.total_ai_requests ? 100 : 0, 100)}%` }}/></div></div><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">Responses</span><span className="mono text-[#d9e9ee]">{summary.total_responses.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#cb9eeb]" style={{ width: `${Math.min(summary.total_responses ? 100 : 0, 100)}%` }}/></div></div></div></div>
     </div>
-    <div className="panel mb-6 overflow-hidden"><div className="flex items-center justify-between border-b border-[#1b3448] px-5 py-4 md:px-6"><div><div className="text-sm font-semibold text-[#e2e8f0]">Companies</div><div className="mt-1 text-[11px] text-[#71899d]">Subscription, workforce, knowledge, and activity visibility without entering any customer workspace.</div></div><span className="rounded-full border border-[#4a3a78] bg-[#102c3e] px-2.5 py-1 text-[10px] text-[#8dcbd4]">{companies.length} organizations</span></div><div className="overflow-x-auto"><table className="w-full min-w-[1120px] text-left"><thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">Company</th><th className="px-4 py-3 font-medium">Subscription</th><th className="px-4 py-3 font-medium">Users</th><th className="px-4 py-3 font-medium">AI employees</th><th className="px-4 py-3 font-medium">Knowledge</th><th className="px-4 py-3 font-medium">Last activity</th><th className="px-6 py-3 text-right font-medium">State</th></tr></thead><tbody>{companies.map((company) => <tr key={company.id} className="border-b border-[#162d40] last:border-0"><td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#173b48] text-[11px] font-bold text-[#75dbe5]">{company.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><div className="text-[12px] font-semibold text-[#e2e8f0]">{company.name}</div><div className="mt-1 text-[10px] text-[#688399]">Registered {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(company.registration_date))}</div></div></div></td><td className="px-4 py-4"><div className="text-[12px] capitalize text-[#d4e3e8]">{company.subscription_plan}</div><div className="mt-1 text-[10px] text-[#71899d]">{company.subscription_status} 路 {formatPlatformCurrency(company.monthly_price_cents)}/mo</div></td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.user_count}</td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.ai_employee_count}</td><td className="px-4 py-4"><div className="text-[12px] text-[#b4c8d2]">{company.knowledge_file_count} files</div><div className="mt-1 text-[10px] text-[#71899d]">{formatPlatformBytes(company.storage_bytes)}</div></td><td className="px-4 py-4 text-[11px] text-[#8ca4b5]">{company.last_activity ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(company.last_activity)) : 'No activity yet'}</td><td className="px-6 py-4 text-right"><Status>{company.status === 'active' ? 'Healthy' : company.status}</Status></td></tr>)}</tbody></table></div></div>
+    <div className="panel mb-6 overflow-hidden"><div className="flex items-center justify-between border-b border-[#1b3448] px-5 py-4 md:px-6"><div><div className="text-sm font-semibold text-[#e2e8f0]">Companies</div><div className="mt-1 text-[11px] text-[#71899d]">Subscription, workforce, knowledge, and activity visibility without entering any customer workspace.</div></div><span className="rounded-full border border-[#4a3a78] bg-[#102c3e] px-2.5 py-1 text-[10px] text-[#8dcbd4]">{companies.length} organizations</span></div><div className="overflow-x-auto"><table className="w-full min-w-[1240px] text-left"><thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">Company</th><th className="px-4 py-3 font-medium">Subscription</th><th className="px-4 py-3 font-medium">Users</th><th className="px-4 py-3 font-medium">AI employees</th><th className="px-4 py-3 font-medium">Knowledge</th><th className="px-4 py-3 font-medium">Last activity</th><th className="px-4 py-3 text-right font-medium">State</th><th className="px-6 py-3 text-right font-medium">Action</th></tr></thead><tbody>{companies.map((company) => <tr key={company.id} className="border-b border-[#162d40] last:border-0"><td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#173b48] text-[11px] font-bold text-[#75dbe5]">{company.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><div className="text-[12px] font-semibold text-[#e2e8f0]">{company.name}</div><div className="mt-1 text-[10px] text-[#688399]">Registered {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(company.registration_date))}</div></div></div></td><td className="px-4 py-4"><div className="text-[12px] capitalize text-[#d4e3e8]">{company.subscription_plan}</div><div className="mt-1 text-[10px] text-[#71899d]">{company.subscription_status} 路 {formatPlatformCurrency(company.monthly_price_cents)}/mo</div></td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.user_count}</td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.ai_employee_count}</td><td className="px-4 py-4"><div className="text-[12px] text-[#b4c8d2]">{company.knowledge_file_count} files</div><div className="mt-1 text-[10px] text-[#71899d]">{formatPlatformBytes(company.storage_bytes)}</div></td><td className="px-4 py-4 text-[11px] text-[#8ca4b5]">{company.last_activity ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(company.last_activity)) : 'No activity yet'}</td><td className="px-4 py-4 text-right"><Status>{company.status === 'active' ? 'Healthy' : company.status}</Status></td><td className="px-6 py-4 text-right">{company.subscription_plan.toLowerCase() === 'basic' ? <button onClick={() => void upgradeToPremium(company.id, company.name)} disabled={upgradingOrganizationId === company.id} className="btn-quiet rounded-lg px-3 py-2 text-[10px] text-[#8dcbd4]">{upgradingOrganizationId === company.id ? 'Upgrading...' : 'Upgrade to Premium'}</button> : <span className="text-[10px] text-[#6f8998]">Premium active</span>}</td></tr>)}</tbody></table></div></div>
     <div className="grid gap-4 lg:grid-cols-[.85fr_1.15fr]">
       <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">System</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">Platform footprint</div></div><Activity size={18} className="text-[#f2c66a]"/></div><div className="grid grid-cols-2 gap-3"><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Companies</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_companies}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Employees</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_employees}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Files</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_knowledge_files}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Events</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{recentActivity.length}</div></div></div></div>
       <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">Company activity</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">Recent events</div></div><Clock4 size={18} className="text-[#8b5cf6]"/></div>{recentActivity.length === 0 ? <EmptyState title="No activity recorded yet" description="Onboarding and knowledge lifecycle events will appear here." compact/> : <div className="space-y-3">{recentActivity.slice(0, 6).map((event) => { const company = companies.find((candidate) => candidate.id === event.organization_id); return <div key={event.id} className="flex items-center gap-3 border-b border-[#162d40] pb-3 last:border-0 last:pb-0"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#173b48] text-[#8b5cf6]"><Activity size={13}/></div><div className="min-w-0 flex-1"><div className="truncate text-[12px] text-[#d7e7eb]">{event.event_type.replaceAll('_', ' ')}</div><div className="mt-1 text-[10px] text-[#71899d]">{company?.name || event.organization_id}</div></div><div className="shrink-0 text-[10px] text-[#7892a5]">{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(event.created_at))}</div></div>; })}</div>}</div>

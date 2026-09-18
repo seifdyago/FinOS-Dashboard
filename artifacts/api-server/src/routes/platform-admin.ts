@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import {
   accountApplications,
+  activityEvents,
   db,
   organizations,
   subscriptions,
@@ -21,9 +22,12 @@ import {
   PlatformAdminRequestError,
   requirePlatformAdminRequestContext,
 } from "../lib/platform-admin-context";
+import { AUTH_SESSION_COOKIE, getAuthenticatedUser } from "../lib/auth-session";
 import { getPlatformAnalytics } from "../lib/platform-analytics-service";
 
 const router: IRouter = Router();
+
+const PREMIUM_PRICE_CENTS = 200_000;
 
 function applicationResponse(application: typeof accountApplications.$inferSelect) {
   return {
@@ -227,6 +231,109 @@ router.get("/platform-admin/analytics", async (req, res): Promise<void> => {
     }
     req.log.error({ error }, "Platform analytics request failed");
     res.status(500).json({ error: "Unable to load platform analytics." });
+  }
+});
+
+router.post("/platform-admin/organizations/:organizationId/upgrade-premium", async (req, res): Promise<void> => {
+  const parsedHeaders = DecideAccountApplicationHeader.safeParse({
+    "x-finos-platform-admin-email": req.header("x-finos-platform-admin-email"),
+  });
+  const organizationId = typeof req.params.organizationId === "string" ? req.params.organizationId.trim() : "";
+  if (!parsedHeaders.success || !organizationId) {
+    res.status(400).json({ error: "A valid platform admin identity and organization ID are required." });
+    return;
+  }
+
+  try {
+    const admin = await requirePlatformAdminRequestContext(req);
+    const sessionCookie = req.headers.cookie
+      ?.split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${AUTH_SESSION_COOKIE}=`));
+    const sessionToken = sessionCookie
+      ? decodeURIComponent(sessionCookie.slice(`${AUTH_SESSION_COOKIE}=`.length))
+      : undefined;
+    const authenticatedUser = await getAuthenticatedUser(sessionToken);
+    const requestedAdminEmail = req.header("x-finos-platform-admin-email")!.trim().toLowerCase();
+    if (
+      !authenticatedUser ||
+      authenticatedUser.email.trim().toLowerCase() !== requestedAdminEmail ||
+      !["owner", "admin"].includes((authenticatedUser.platformAdminRole || "").trim().toLowerCase())
+    ) {
+      res.status(403).json({ error: "An authenticated platform admin session is required." });
+      return;
+    }
+    const updated = await db.transaction(async (transaction) => {
+      const [organization] = await transaction
+        .select({ id: organizations.id, name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .limit(1);
+      if (!organization) return null;
+
+      const [currentSubscription] = await transaction
+        .select({ plan: subscriptions.plan })
+        .from(subscriptions)
+        .where(eq(subscriptions.organizationId, organizationId))
+        .limit(1);
+      if (!currentSubscription) throw new Error("Organization subscription was not found.");
+
+      const [subscription] = await transaction
+        .update(subscriptions)
+        .set({
+          plan: "premium",
+          priceCents: PREMIUM_PRICE_CENTS,
+          status: "active",
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.organizationId, organizationId))
+        .returning({
+          organizationId: subscriptions.organizationId,
+          plan: subscriptions.plan,
+          status: subscriptions.status,
+          priceCents: subscriptions.priceCents,
+          updatedAt: subscriptions.updatedAt,
+        });
+      if (!subscription) throw new Error("Organization subscription was not found.");
+
+      await transaction.insert(activityEvents).values({
+        organizationId,
+        eventType: "subscription_upgraded",
+        metadata: {
+          from_plan: currentSubscription.plan,
+          to_plan: "premium",
+          price_cents: PREMIUM_PRICE_CENTS,
+          changed_by_platform_admin: admin.userId,
+        },
+      });
+
+      return { organization, subscription };
+    });
+
+    if (!updated) {
+      res.status(404).json({ error: "Organization not found." });
+      return;
+    }
+    res.json({
+      organization_id: updated.organization.id,
+      organization_name: updated.organization.name,
+      plan: updated.subscription.plan,
+      status: updated.subscription.status,
+      price_cents: updated.subscription.priceCents,
+      updated_at: updated.subscription.updatedAt,
+    });
+  } catch (error) {
+    if (error instanceof PlatformAdminRequestError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    const message = error instanceof Error ? error.message : "Unable to upgrade organization subscription.";
+    if (message.includes("subscription was not found")) {
+      res.status(404).json({ error: message });
+      return;
+    }
+    req.log.error({ error, organizationId }, "Platform Premium upgrade failed");
+    res.status(500).json({ error: "Unable to upgrade organization subscription." });
   }
 });
 
