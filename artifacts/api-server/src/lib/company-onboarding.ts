@@ -9,6 +9,7 @@ import {
 } from "@workspace/db";
 import { CreateCompanyOnboardingBody } from "@workspace/api-zod";
 import { createHash, randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 
 import { hashPassword } from "./password-auth";
 import { privateObjectStorage } from "./private-object-storage";
@@ -148,7 +149,7 @@ export async function createCompanyOnboarding(
   const idNumber = parsed.idNumber.trim();
   const documentReference = parsed.documentReference.trim();
   const documentType = parsed.documentType.trim() || "identity_document";
-  const domain =
+  const requestedDomain =
     getEmailDomain(email);
 
   if (
@@ -224,6 +225,20 @@ export async function createCompanyOnboarding(
          */
         const applicationId =
           randomUUID();
+
+        // Public email domains such as gmail.com can belong to multiple
+        // legitimate workspaces. Keep the user's login email unchanged,
+        // but give each workspace a stable unique internal domain key.
+        let domain = requestedDomain;
+        const [domainOwner] = await transaction
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(eq(organizations.domain, requestedDomain))
+          .limit(1);
+        if (domainOwner) {
+          const localPart = email.split("@")[0]?.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "workspace";
+          domain = `${localPart}.${requestedDomain}`;
+        }
 
         /*
          * Create the company organization.
