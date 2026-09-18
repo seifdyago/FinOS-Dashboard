@@ -11,6 +11,26 @@ const IDENTITY_DOCUMENT_CONTENT_TYPES = [
   "application/octet-stream",
 ];
 
+export function validateIdentityDocumentMetadata(input: {
+  originalFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}): void {
+  if (!input.originalFileName.trim()) {
+    throw new Error("originalFileName is required.");
+  }
+  const mimeType = input.mimeType.trim().toLowerCase();
+  if (!IDENTITY_DOCUMENT_CONTENT_TYPES.includes(mimeType)) {
+    throw new Error("Unsupported identity document type.");
+  }
+  if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes <= 0) {
+    throw new Error("sizeBytes must be a positive integer.");
+  }
+  if (input.sizeBytes > MAX_IDENTITY_DOCUMENT_BYTES) {
+    throw new Error("Identity document is too large.");
+  }
+}
+
 type StorageMethod = "PUT" | "HEAD" | "GET" | "DELETE";
 
 export class PrivateObjectNotFoundError extends Error {

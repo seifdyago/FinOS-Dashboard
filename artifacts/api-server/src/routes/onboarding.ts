@@ -11,8 +11,10 @@ import {
 } from "@workspace/api-zod";
 
 import { recordActivityEvent } from "../lib/activity-service";
-import { privateObjectStorage } from "../lib/private-object-storage";
-import { validateKnowledgeFileMetadata } from "../lib/knowledge-document-repository";
+import {
+  privateObjectStorage,
+  validateIdentityDocumentMetadata,
+} from "../lib/private-object-storage";
 import {
   RequestOnboardingDocumentUploadUrlBody,
   RequestOnboardingDocumentUploadUrlResponse,
@@ -30,7 +32,7 @@ router.post(
     }
 
     try {
-      validateKnowledgeFileMetadata({
+      validateIdentityDocumentMetadata({
         originalFileName: parsed.data.original_file_name,
         mimeType: parsed.data.mime_type,
         sizeBytes: parsed.data.size_bytes,
