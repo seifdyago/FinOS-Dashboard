@@ -71,6 +71,10 @@ export class PrivateObjectStorage {
           signal: AbortSignal.timeout(30_000),
         });
         if (response.ok) return true;
+        console.warn("Private identity document check returned a non-success status", {
+          status: response.status,
+          statusText: response.statusText,
+        });
       } catch {
         // A successful PUT can take a short interval to become visible to a signed read.
       }
@@ -124,6 +128,7 @@ export class PrivateObjectStorage {
       pathname,
       operation,
       validUntil: signedToken.validUntil,
+      ...(operation === "head" || operation === "get" ? { useCache: false } : {}),
       ...(operation === "put"
         ? {
             allowedContentTypes: IDENTITY_DOCUMENT_CONTENT_TYPES,
