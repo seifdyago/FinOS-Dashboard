@@ -657,8 +657,10 @@ components:
         subscription:
           type: string
           enum:
-            - basic
-            - premium
+            - merchant_basic
+            - merchant_premium
+            - company_15
+            - company_32
           description: Requested subscription plan
 
       required:

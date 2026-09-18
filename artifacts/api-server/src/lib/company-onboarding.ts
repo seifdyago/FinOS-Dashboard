@@ -27,7 +27,7 @@ export type CompanyOnboardingInput = {
   password: string;
   industry: string;
   company_size: string;
-  subscription: "basic" | "premium";
+  subscription: "basic" | "premium" | "merchant_basic" | "merchant_premium" | "company_15" | "company_32";
   phone: string;
   idNumber: string;
   documentReference: string;
@@ -88,11 +88,16 @@ function getAdminName(email: string): string {
 }
 
 function getSubscriptionPriceCents(
-  plan: "basic" | "premium",
+  plan: "merchant_basic" | "merchant_premium" | "company_15" | "company_32",
 ): number {
-  return plan === "premium"
-    ? 200_000
-    : 100_000;
+  return {
+    basic: 20_000,
+    premium: 40_000,
+    merchant_basic: 20_000,
+    merchant_premium: 40_000,
+    company_15: 30_000,
+    company_32: 60_000,
+  }[plan];
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -172,7 +177,11 @@ export async function createCompanyOnboarding(
 
   if (
     subscription !== "basic" &&
-    subscription !== "premium"
+    subscription !== "premium" &&
+    subscription !== "merchant_basic" &&
+    subscription !== "merchant_premium" &&
+    subscription !== "company_15" &&
+    subscription !== "company_32"
   ) {
     throw new Error(
       "Please select a valid subscription plan.",
@@ -195,7 +204,11 @@ export async function createCompanyOnboarding(
     .digest("hex");
 
   const requestedPlan =
-    subscription;
+    subscription === "basic"
+      ? "merchant_basic"
+      : subscription === "premium"
+        ? "merchant_premium"
+        : subscription;
 
   const priceCents =
     getSubscriptionPriceCents(

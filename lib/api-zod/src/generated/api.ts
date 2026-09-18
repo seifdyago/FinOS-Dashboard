@@ -47,7 +47,7 @@ export const CreateCompanyOnboardingBody = zod.object({
   "password": zod.string().min(createCompanyOnboardingBodyPasswordMin).describe('Account password. The server stores only a secure password hash.'),
   "industry": zod.string().min(1).describe('Company industry'),
   "company_size": zod.string().min(1).describe('Company size'),
-  "subscription": zod.enum(['basic', 'premium']).describe('Requested subscription plan')
+  "subscription": zod.enum(['merchant_basic', 'merchant_premium', 'company_15', 'company_32']).describe('Requested subscription plan')
 })
 
 export const CreateCompanyOnboardingResponse = zod.object({

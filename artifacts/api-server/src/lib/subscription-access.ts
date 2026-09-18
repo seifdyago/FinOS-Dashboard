@@ -34,32 +34,30 @@ export function createSubscriptionAccess(
 ): SubscriptionAccess {
   const plan = subscription ? getSubscriptionPlan(normalized(subscription.plan)) : undefined;
   const hasActiveSubscription = isActive(subscription) && Boolean(plan);
-  const premium = hasActiveSubscription && plan?.id === "premium";
+  const activePlan = hasActiveSubscription ? plan : undefined;
+  const fullAccess = Boolean(activePlan?.includesAllEmployees);
 
   return {
     hasActiveSubscription,
-    plan: hasActiveSubscription && plan ? (plan.id as SubscriptionPlanId) : null,
-    canAccessEmployee: (employee) =>
-      hasActiveSubscription &&
-      Boolean(
-        premium ||
-          (plan?.id === "basic" &&
-            (plan.employeeKeys.includes(employee.employeeKey as never) ||
-              plan.employeeRoles.some((role) => normalized(role) === normalized(employee.role)))),
-      ),
+    plan: activePlan ? (activePlan.id as SubscriptionPlanId) : null,
+    canAccessEmployee: (employee) => Boolean(
+      activePlan &&
+        (activePlan.includesAllEmployees ||
+          activePlan.employeeKeys.includes(employee.employeeKey as never) ||
+          activePlan.employeeRoles.some((role) => normalized(role) === normalized(employee.role))),
+    ),
     canAccessDepartment: (department) =>
-      Boolean(premium && normalized(department)),
+      Boolean(activePlan?.includesAllDepartments && normalized(department)),
     canAccessEmployeePermission: (employee, permission) => {
-      if (!hasActiveSubscription || !permission.trim()) return false;
-      if (premium) return true;
+      if (!activePlan || !permission.trim()) return false;
+      if (fullAccess) return true;
       return (
-        plan?.id === "basic" &&
-        (plan.employeeKeys.includes(employee.employeeKey as never) ||
-          plan.employeeRoles.some((role) => normalized(role) === normalized(employee.role))) &&
+        (activePlan.employeeKeys.includes(employee.employeeKey as never) ||
+          activePlan.employeeRoles.some((role) => normalized(role) === normalized(employee.role))) &&
         employee.permissions.some((candidate) => normalized(candidate) === normalized(permission))
       );
     },
-    hasAdvancedAccess: Boolean(premium && plan?.includesAdvancedAccess),
+    hasAdvancedAccess: Boolean(activePlan?.includesAdvancedAccess),
   };
 }
 
