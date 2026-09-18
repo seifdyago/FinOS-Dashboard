@@ -206,6 +206,9 @@ router.get("/platform-admin/analytics", async (req, res): Promise<void> => {
           user_count: company.userCount,
           employee_count: company.employeeCount,
           ai_employee_count: company.aiEmployeeCount,
+          top_employee_name: company.topEmployeeName,
+          top_employee_role: company.topEmployeeRole,
+          top_employee_performance: company.topEmployeePerformance,
           knowledge_file_count: company.knowledgeFileCount,
           storage_bytes: company.storageBytes,
           last_activity: company.lastActivity,
@@ -231,6 +234,54 @@ router.get("/platform-admin/analytics", async (req, res): Promise<void> => {
     }
     req.log.error({ error }, "Platform analytics request failed");
     res.status(500).json({ error: "Unable to load platform analytics." });
+  }
+});
+
+router.post("/platform-admin/organizations/:organizationId/status", async (req, res): Promise<void> => {
+  const parsedHeaders = GetPlatformAnalyticsHeader.safeParse({
+    "x-finos-platform-admin-email": req.header("x-finos-platform-admin-email"),
+  });
+  const organizationId = typeof req.params.organizationId === "string" ? req.params.organizationId.trim() : "";
+  const status = req.body?.status === "active" || req.body?.status === "suspended" ? req.body.status : null;
+  if (!parsedHeaders.success || !organizationId || !status) {
+    res.status(400).json({ error: "A valid platform admin identity, organization ID, and status are required." });
+    return;
+  }
+
+  try {
+    const admin = await requirePlatformAdminRequestContext(req);
+    const updated = await db.transaction(async (transaction) => {
+      const [organization] = await transaction
+        .update(organizations)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(organizations.id, organizationId))
+        .returning({ id: organizations.id, name: organizations.name, status: organizations.status });
+      if (!organization) return null;
+
+      await transaction
+        .update(users)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(users.organizationId, organizationId));
+      await transaction.insert(activityEvents).values({
+        organizationId,
+        eventType: status === "active" ? "organization_reactivated" : "organization_suspended",
+        metadata: { changed_by_platform_admin: admin.userId, status },
+      });
+      return organization;
+    });
+
+    if (!updated) {
+      res.status(404).json({ error: "Organization not found." });
+      return;
+    }
+    res.json({ organization_id: updated.id, organization_name: updated.name, status: updated.status });
+  } catch (error) {
+    if (error instanceof PlatformAdminRequestError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    req.log.error({ error, organizationId, status }, "Platform organization status change failed");
+    res.status(500).json({ error: "Unable to change organization status." });
   }
 });
 

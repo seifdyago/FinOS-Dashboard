@@ -26,6 +26,7 @@ export async function getPlatformAnalytics() {
     subscriptionRows,
     userRows,
     employeeRows,
+    topEmployeeRows,
     knowledgeRows,
     activity,
     usageRows,
@@ -49,6 +50,15 @@ export async function getPlatformAnalytics() {
       .groupBy(employees.organizationId),
     db
       .select({
+        organizationId: employees.organizationId,
+        name: employees.name,
+        role: employees.role,
+        performance: employees.performance,
+      })
+      .from(employees)
+      .orderBy(desc(employees.performance)),
+    db
+      .select({
         organizationId: knowledgeDocuments.organizationId,
         count: sql<number>`count(*)::int`,
         storageBytes: sql<number>`coalesce(sum(${knowledgeDocuments.sizeBytes}), 0)::int`,
@@ -66,6 +76,12 @@ export async function getPlatformAnalytics() {
 
   const usersByOrganization = countByOrganization(userRows);
   const employeesByOrganization = countByOrganization(employeeRows);
+  const topEmployeeByOrganization = new Map<string, (typeof topEmployeeRows)[number]>();
+  for (const employee of topEmployeeRows) {
+    if (!topEmployeeByOrganization.has(employee.organizationId)) {
+      topEmployeeByOrganization.set(employee.organizationId, employee);
+    }
+  }
   const knowledgeByOrganization = new Map(
     knowledgeRows.map((row) => [
       row.organizationId,
@@ -89,6 +105,7 @@ export async function getPlatformAnalytics() {
     const subscription = subscriptionsByOrganization.get(organization.id);
     const knowledge = knowledgeByOrganization.get(organization.id) ?? { count: 0, storageBytes: 0 };
     const metrics = usageByOrganization.get(organization.id) ?? new Map<string, number>();
+    const topEmployee = topEmployeeByOrganization.get(organization.id);
     return {
       id: organization.id,
       name: organization.name,
@@ -99,6 +116,9 @@ export async function getPlatformAnalytics() {
       userCount: usersByOrganization.get(organization.id) ?? 0,
       employeeCount: employeesByOrganization.get(organization.id) ?? 0,
       aiEmployeeCount: employeesByOrganization.get(organization.id) ?? 0,
+      topEmployeeName: topEmployee?.name ?? null,
+      topEmployeeRole: topEmployee?.role ?? null,
+      topEmployeePerformance: topEmployee?.performance ?? null,
       knowledgeFileCount: knowledge.count,
       storageBytes: knowledge.storageBytes,
       lastActivity: toIsoTimestamp(lastActivityByOrganization.get(organization.id)),

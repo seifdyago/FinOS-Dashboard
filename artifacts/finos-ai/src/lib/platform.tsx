@@ -59,6 +59,7 @@ export type PlatformNotification = {
 export type WorkspaceUser = {
   name: string;
   email: string;
+  avatar?: string;
   role: string;
   platform_admin_role?: string | null;
   initials: string;
@@ -217,6 +218,7 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<WorkspaceUser>(() => readTenantStored(tenant.id, 'user', {
     name: `${tenant.name} Admin`,
     email: `admin@${tenant.domain}`,
+    avatar: '',
     role: 'Workspace admin',
     platform_admin_role: null,
     initials: `${tenant.initials}A`,

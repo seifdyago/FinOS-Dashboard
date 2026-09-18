@@ -16,6 +16,12 @@ export interface PlatformCompanyAnalytics {
   user_count: number;
   employee_count: number;
   ai_employee_count: number;
+  /** @nullable */
+  top_employee_name: string | null;
+  /** @nullable */
+  top_employee_role: string | null;
+  /** @nullable */
+  top_employee_performance: number | null;
   knowledge_file_count: number;
   storage_bytes: number;
   /** @nullable */

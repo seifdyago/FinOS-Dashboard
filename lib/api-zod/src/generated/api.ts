@@ -382,6 +382,9 @@ export const GetPlatformAnalyticsResponse = zod.object({
   "user_count": zod.number(),
   "employee_count": zod.number(),
   "ai_employee_count": zod.number(),
+  "top_employee_name": zod.string().nullable(),
+  "top_employee_role": zod.string().nullable(),
+  "top_employee_performance": zod.number().nullable(),
   "knowledge_file_count": zod.number(),
   "storage_bytes": zod.number(),
   "last_activity": zod.string().nullable(),
@@ -491,5 +494,4 @@ export const RecordActivityEventBody = zod.object({
 })
 
 export const RecordActivityEventResponse = zod.void()
-
 
