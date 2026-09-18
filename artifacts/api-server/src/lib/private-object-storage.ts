@@ -65,9 +65,9 @@ export class PrivateObjectStorage {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
       try {
-        const downloadUrl = await this.createSignedUrl(objectPath, "GET");
-        const response = await fetch(downloadUrl, {
-          method: "GET",
+        const checkUrl = await this.createSignedUrl(objectPath, "HEAD");
+        const response = await fetch(checkUrl, {
+          method: "HEAD",
           signal: AbortSignal.timeout(30_000),
         });
         if (response.ok) return true;
