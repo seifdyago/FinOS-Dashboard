@@ -61,20 +61,27 @@ export class PrivateObjectStorage {
     const oidcToken = process.env.VERCEL_OIDC_TOKEN?.trim();
     const storeId = process.env.BLOB_STORE_ID?.trim();
     const readWriteToken = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+    const retryDelaysMs = [0, 150, 350, 700, 1_200];
 
-    try {
-      await head(pathname, {
-        ...(oidcToken && storeId
-          ? { oidcToken, storeId }
-          : readWriteToken
-            ? { token: readWriteToken }
-            : {}),
-        abortSignal: AbortSignal.timeout(30_000),
-      });
-      return true;
-    } catch {
-      return false;
+    for (const delayMs of retryDelaysMs) {
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      try {
+        await head(pathname, {
+          ...(oidcToken && storeId
+            ? { oidcToken, storeId }
+            : readWriteToken
+              ? { token: readWriteToken }
+              : {}),
+          abortSignal: AbortSignal.timeout(30_000),
+        });
+        return true;
+      } catch {
+        // A successful PUT can take a short interval to become visible to HEAD.
+      }
     }
+    return false;
   }
 
   async createDownloadUrl(objectPath: string): Promise<string> {
