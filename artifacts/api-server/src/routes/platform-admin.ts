@@ -250,6 +250,16 @@ router.post("/platform-admin/organizations/:organizationId/status", async (req, 
 
   try {
     const admin = await requirePlatformAdminRequestContext(req);
+    const reviewerEmail = req.header("x-finos-platform-admin-email")!.trim().toLowerCase();
+    const [reviewer] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, reviewerEmail))
+      .limit(1);
+    if (!reviewer) {
+      res.status(403).json({ error: "Platform admin reviewer user was not found." });
+      return;
+    }
     const updated = await db.transaction(async (transaction) => {
       const [organization] = await transaction
         .update(organizations)
@@ -273,7 +283,7 @@ router.post("/platform-admin/organizations/:organizationId/status", async (req, 
             verificationStatus: "approved",
             verificationNotes: "Approved through the authenticated platform-owner Activate workflow.",
             rejectionReason: null,
-            reviewedByUserId: admin.userId,
+            reviewedByUserId: reviewer.id,
             reviewedAt: new Date(),
             updatedAt: new Date(),
           })
