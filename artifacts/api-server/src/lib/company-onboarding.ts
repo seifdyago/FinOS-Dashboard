@@ -104,7 +104,7 @@ function isUniqueViolation(error: unknown): boolean {
   return code === "23505";
 }
 
-function getDatabaseErrorDetails(error: unknown): Record<string, unknown> {
+export function getDatabaseErrorDetails(error: unknown): Record<string, unknown> {
   if (typeof error !== "object" || error === null) {
     return { message: String(error) };
   }
@@ -118,6 +118,9 @@ function getDatabaseErrorDetails(error: unknown): Record<string, unknown> {
       typeof record.constraint === "string" ? record.constraint : undefined,
     table: typeof record.table === "string" ? record.table : undefined,
     column: typeof record.column === "string" ? record.column : undefined,
+    detail: typeof record.detail === "string" ? record.detail : undefined,
+    hint: typeof record.hint === "string" ? record.hint : undefined,
+    stack: typeof record.stack === "string" ? record.stack : undefined,
   };
 }
 

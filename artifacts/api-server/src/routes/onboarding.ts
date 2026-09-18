@@ -3,6 +3,7 @@ import { Router, type IRouter } from "express";
 import {
   CompanyDomainAlreadyExistsError,
   createCompanyOnboarding,
+  getDatabaseErrorDetails,
 } from "../lib/company-onboarding";
 
 import {
@@ -134,7 +135,7 @@ router.post(
       }
 
       req.log.error(
-        { error },
+        { error: getDatabaseErrorDetails(error) },
         "Company onboarding failed",
       );
 
