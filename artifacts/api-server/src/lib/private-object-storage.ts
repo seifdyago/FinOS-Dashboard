@@ -134,6 +134,7 @@ export class PrivateObjectStorage {
             allowedContentTypes: IDENTITY_DOCUMENT_CONTENT_TYPES,
             maximumSizeInBytes: MAX_IDENTITY_DOCUMENT_BYTES,
             allowOverwrite: false,
+            addRandomSuffix: false,
           }
         : {}),
     } as Parameters<typeof presignUrl>[1]);
