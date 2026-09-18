@@ -155,8 +155,7 @@ const initialPreferences: WorkspacePreferences = {
   weeklyDigest: false,
 };
 
-export function tenantForIdentity(identity: string, demo = false): TenantWorkspace {
-  if (demo) return tenantCatalog[0];
+export function tenantForIdentity(identity: string): TenantWorkspace {
   const domain = identity.trim().toLowerCase().split('@')[1] || 'orbit.digital';
   const known = tenantCatalog.find((tenant) => tenant.domain === domain);
   if (known) return known;
@@ -213,7 +212,7 @@ const PlatformContext = createContext<PlatformContextValue | null>(null);
 
 export function PlatformProvider({ children }: { children: ReactNode }) {
   const [tenant, setTenant] = useState<TenantWorkspace>(() => readStored('finos-active-tenant', tenantCatalog[0]));
-  const legacyMigration = tenant.id === 'orbit-digital';
+  const legacyMigration = false;
   const [theme, setTheme] = useState<PlatformTheme>(() => readTenantStored(tenant.id, 'theme', 'dark', legacyMigration));
   const [user, setUser] = useState<WorkspaceUser>(() => readTenantStored(tenant.id, 'user', {
     name: `${tenant.name} Admin`,
@@ -226,11 +225,11 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     timezone: 'Pacific Time (US & Canada)',
   }, legacyMigration));
   const [preferences, setPreferences] = useState(() => readTenantStored(tenant.id, 'preferences', { ...initialPreferences, workspaceName: tenant.name, operatingContext: `${tenant.name} is a global payments platform serving thoughtful commerce brands.` }, legacyMigration));
-  const [notifications, setNotifications] = useState(() => readTenantStored(tenant.id, 'notifications', initialNotifications, legacyMigration));
-  const [transactions, setTransactions] = useState(() => readTenantStored(tenant.id, 'transactions', tenant.id === 'orbit-digital' ? initialTransactions : [], legacyMigration));
-  const [customers, setCustomers] = useState(() => normalizeCustomers(readTenantStored(tenant.id, 'customers', tenant.id === 'orbit-digital' ? initialCustomers : [], legacyMigration)));
-  const [merchants, setMerchants] = useState(() => readTenantStored(tenant.id, 'merchants', tenant.id === 'orbit-digital' ? initialMerchants : [], legacyMigration));
-  const [reports, setReports] = useState(() => readTenantStored(tenant.id, 'reports', tenant.id === 'orbit-digital' ? initialReports : [], legacyMigration));
+  const [notifications, setNotifications] = useState(() => readTenantStored(tenant.id, 'notifications', [], legacyMigration));
+  const [transactions, setTransactions] = useState(() => readTenantStored(tenant.id, 'transactions', [], legacyMigration));
+  const [customers, setCustomers] = useState(() => normalizeCustomers(readTenantStored(tenant.id, 'customers', [], legacyMigration)));
+  const [merchants, setMerchants] = useState(() => readTenantStored(tenant.id, 'merchants', [], legacyMigration));
+  const [reports, setReports] = useState(() => readTenantStored(tenant.id, 'reports', [], legacyMigration));
 
   useEffect(() => {
     localStorage.setItem(tenantKey(tenant.id, 'theme'), JSON.stringify(theme));

@@ -230,16 +230,14 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
     try {
       const key = `finos:${tenant.id}:employees`;
       const stored = localStorage.getItem(key) || (tenant.id === 'orbit-digital' ? localStorage.getItem('finos-employees') : null);
-      const parsed = stored ? JSON.parse(stored) as Employee[] : tenant.id === 'orbit-digital' ? employees : [];
+      const parsed = stored ? JSON.parse(stored) as Employee[] : [];
       const uniqueParsed = parsed.reduce<Employee[]>((unique, employee) => {
         if (!unique.some((existing) => existing.id === employee.id || employeeRoleKey(existing.role) === employeeRoleKey(employee.role))) {
           unique.push(employee);
         }
         return unique;
       }, []);
-      const merged = tenant.id === 'orbit-digital'
-        ? [...uniqueParsed, ...employees.filter((seed) => !uniqueParsed.some((existing) => existing.id === seed.id || employeeRoleKey(existing.role) === employeeRoleKey(seed.role)))]
-        : uniqueParsed;
+      const merged = uniqueParsed;
       return merged.map((employee) => ({
         ...employee,
         responsibilities: employee.responsibilities || [],
@@ -252,7 +250,7 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
         manager: employee.manager || 'Workspace admin',
       }));
     } catch {
-      return tenant.id === 'orbit-digital' ? employees : [];
+      return [];
     }
   });
 
@@ -386,11 +384,11 @@ const merchants = [
 
 function Logo({ compact = false }: { compact?: boolean }) {
   return <div className="flex items-center gap-2.5" data-testid="brand-finos">
-    <div className="relative grid h-8 w-8 place-items-center rounded-[9px] bg-[#8b5cf6] text-[#07111f]">
+    <div className="relative grid h-8 w-8 place-items-center rounded-[9px] bg-gradient-to-br from-[#7c3aed] via-[#4f46e5] to-[#22d3ee] text-[#07111f] shadow-[0_0_22px_rgba(99,70,220,.35)]">
       <span className="absolute h-[2px] w-4 rotate-45 bg-[#07111f]" /><span className="absolute h-[2px] w-4 -rotate-45 bg-[#07111f]" />
       <span className="h-1.5 w-1.5 rounded-full bg-[#07111f]" />
     </div>
-    {!compact && <span className="display-font text-[19px] font-bold tracking-[-.04em] text-[#edf7fb]">finos<span className="text-[#8b5cf6]">.</span></span>}
+    {!compact && <span className="display-font text-[19px] font-bold tracking-[-.04em] text-[#edf7fb]">FinOS<span className="text-[#8b5cf6]"> AI</span></span>}
   </div>;
 }
 
@@ -459,7 +457,7 @@ function Shell({ children, onLogout }: { children:ReactNode; onLogout:()=>void }
         <div className="hidden h-7 w-px bg-[#203447] sm:block" />
          <div className="relative"><button onClick={()=>setUserMenuOpen(!userMenuOpen)} className="flex items-center gap-2 rounded-lg p-1.5 text-left hover:bg-[#142a3b]" data-testid="button-user-menu"><img src={accountAvatarUrl(platform.user)} alt="" className="h-7 w-7 rounded-full object-cover" referrerPolicy="no-referrer"/><span className="hidden text-[12px] font-semibold text-[#cddbe6] lg:block">{platform.user.name}</span><ChevronDown size={13} className="hidden text-[#718ba1] lg:block"/></button>{userMenuOpen&&<div className="absolute right-0 top-11 z-30 w-48 rounded-xl border border-[#29465d] bg-[#0d1e30] p-1.5 shadow-2xl"><Link href="/profile" onClick={()=>setUserMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-[#c7d8e1] hover:bg-[#26194d]"><UserRound size={14}/> My profile</Link><Link href="/notifications" onClick={()=>setUserMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-[#c7d8e1] hover:bg-[#26194d]"><Bell size={14}/> Notifications {platform.unreadNotifications > 0 && <span className="ml-auto text-[#ff9b90]">{platform.unreadNotifications}</span>}</Link><button onClick={()=>{platform.toggleTheme();setUserMenuOpen(false)}} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[11px] text-[#c7d8e1] hover:bg-[#26194d]">{platform.theme==='dark'?<Sun size={14}/>:<Moon size={14}/>} Use {platform.theme==='dark'?'light':'dark'} mode</button><button onClick={()=>{go('/settings');setUserMenuOpen(false)}} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[11px] text-[#c7d8e1] hover:bg-[#26194d]"><Settings size={14}/> Settings</button></div>}</div>
       </header>
-       {notificationsOpen&&<div className="absolute right-5 top-[63px] z-30 w-[310px] rounded-xl border border-[#29465d] bg-[#0d1e30] p-4 shadow-2xl" data-testid="panel-notifications"><div className="mb-3 flex items-center justify-between"><span className="font-semibold text-[#e6f1f6]">Notifications</span><Link href="/notifications" onClick={()=>setNotificationsOpen(false)} className="text-[10px] text-[#8b5cf6]">View all</Link></div>{platform.notifications.slice(0,3).map((item)=><button key={item.id} onClick={()=>{platform.markNotificationRead(item.id);setNotificationsOpen(false);setLocation('/notifications')}} className="mb-3 block w-full border-l-2 border-[#8b5cf6] py-1 pl-3 text-left last:mb-0"><div className="text-[12px] text-[#d9e9ef]">{item.title}</div><div className="mt-1 text-[10px] text-[#758da2]">{item.time}</div></button>)}</div>}
+        {notificationsOpen&&<div className="absolute right-5 top-[63px] z-30 w-[310px] rounded-xl border border-[#29465d] bg-[#0d1e30] p-4 shadow-2xl" data-testid="panel-notifications"><div className="mb-3 flex items-center justify-between"><span className="font-semibold text-[#e6f1f6]">Notifications</span><Link href="/notifications" onClick={()=>setNotificationsOpen(false)} className="text-[10px] text-[#8b5cf6]">View all</Link></div>{platform.notifications.length === 0 ? <div className="rounded-xl border border-dashed border-white/[.10] px-4 py-6 text-center text-[11px] text-[#758da2]">No workspace notifications yet.</div> : platform.notifications.slice(0,3).map((item)=><button key={item.id} onClick={()=>{platform.markNotificationRead(item.id);setNotificationsOpen(false);setLocation('/notifications')}} className="mb-3 block w-full border-l-2 border-[#8b5cf6] py-1 pl-3 text-left last:mb-0"><div className="text-[12px] text-[#d9e9ef]">{item.title}</div><div className="mt-1 text-[10px] text-[#758da2]">{item.time}</div></button>)}</div>}
       <main className="min-w-0 flex-1 px-4 py-7 md:px-8 lg:px-10">{children}</main>
     </div>
      {commandOpen&&<div className="fixed inset-0 z-50 flex items-start justify-center bg-[#050611]/75 px-4 pt-[13vh]" onMouseDown={()=>setCommandOpen(false)}><div className="w-full max-w-[620px] overflow-hidden rounded-2xl border border-[#4a3a78] bg-[#0d1020] shadow-2xl" onMouseDown={e=>e.stopPropagation()} data-testid="dialog-command"><div className="flex items-center gap-3 border-b border-[#203b50] px-5 py-4"><Search size={18} className="text-[#8b5cf6]"/><input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search pages, payments, customers, merchants..." className="flex-1 bg-transparent text-sm text-[#e7f3f7] outline-none" data-testid="input-command-search"/><button onClick={()=>setCommandOpen(false)} className="rounded bg-[#172d40] px-2 py-1 text-[10px] text-[#8ca4b8]">ESC</button></div><div className="max-h-[390px] overflow-y-auto p-2">{filteredCommands.length?filteredCommands.map((item,index)=><button key={`${item.path}-${item.label}-${index}`} onClick={()=>{go(item.path);setCommandOpen(false);setQuery('')}} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] text-[#c5d5e0] hover:bg-[#173448]" data-testid={`command-${item.path.replaceAll('/','-')}-${index}`}><span className="flex items-center gap-3"><Command size={14} className="text-[#5c8295]"/><span><span className="block">{item.label}</span><span className="mt-0.5 block text-[10px] text-[#6f899c]">{item.detail}</span></span></span><ChevronRight size={14} className="text-[#55748b]"/></button>):<div className="px-3 py-10 text-center text-sm text-[#71899d]">No matching records</div>}</div><div className="flex items-center gap-4 border-t border-[#203b50] px-5 py-3 text-[10px] text-[#71899d]"><span><kbd className="rounded border border-[#2b485b] px-1">⌘ K</kbd> open search</span><span><kbd className="rounded border border-[#2b485b] px-1">ESC</kbd> close</span></div></div></div>}
@@ -471,7 +469,7 @@ function SectionHeader({ eyebrow, title, description, action }: {eyebrow?:string
 }
 
 function MetricCard({ label, value, delta, icon:MetricIcon, color='#8b5cf6', children }: {label:string;value:string;delta?:string;icon:Icon;color?:string;children?:ReactNode}) {
-  return <div className="panel fade-up p-5"><div className="mb-5 flex items-start justify-between"><div className="kicker">{label}</div><div className="grid h-8 w-8 place-items-center rounded-lg" style={{background:`${color}18`,color}}><MetricIcon size={16}/></div></div><div className="display-font text-[26px] font-semibold tracking-[-.05em] text-[#f8fafc]">{value}</div><div className="mt-2 flex items-center gap-1.5 text-[11px]"><span style={{color}}>{delta}</span>{delta&&<span className="text-[#6e8498]">vs previous period</span>}</div>{children}</div>;
+  return <div className="panel metric-glow fade-up p-5"><div className="mb-5 flex items-start justify-between"><div className="kicker">{label}</div><div className="grid h-9 w-9 place-items-center rounded-xl" style={{background:`${color}18`,color,boxShadow:`0 0 24px ${color}22`}}><MetricIcon size={17}/></div></div><div className="display-font text-[26px] font-semibold tracking-[-.05em] text-[#f8fafc]">{value}</div><div className="mt-2 flex items-center gap-1.5 text-[11px]"><span style={{color}}>{delta}</span>{delta&&<span className="text-[#6e8498]">from current records</span>}</div>{children}</div>;
 }
 
 function formatDashboardMoney(value: number): string {
@@ -517,7 +515,7 @@ function Dashboard() {
 
   const chartValues = useMemo(() => {
     const source = tenantTransactions.slice().reverse().map((tx) => Number(tx.amount || 0));
-    if (!source.length) return [18, 28, 24, 42, 36, 54, 48, 64, 58, 72, 66, 80];
+    if (!source.length) return [];
     const max = Math.max(...source, 1);
     return source.slice(-12).map((value) => Math.max(12, Math.round((value / max) * 88)));
   }, [tenantTransactions]);
@@ -530,7 +528,7 @@ function Dashboard() {
   ].filter(Boolean) as Array<{text:string;detail:string;color:string;icon:Icon}>;
 
   return <div className="mx-auto max-w-[1480px]">
-    <div className="relative mb-8 overflow-hidden rounded-[28px] border border-violet-500/20 bg-[radial-gradient(circle_at_85%_15%,rgba(139,92,246,.24),transparent_34%),radial-gradient(circle_at_25%_0%,rgba(59,130,246,.16),transparent_30%),#090b18] p-6 shadow-[0_24px_80px_rgba(0,0,0,.35)] md:p-8">
+    <div className="dashboard-hero relative mb-8 overflow-hidden rounded-[28px] border p-6 shadow-[0_24px_80px_rgba(0,0,0,.35)] md:p-8">
       <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
       <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
         <div>
@@ -555,6 +553,14 @@ function Dashboard() {
       <MetricCard label="Open risk signals" value={(metrics.review + metrics.atRiskMerchants).toLocaleString()} delta={`${metrics.failed} failed payments`} icon={ShieldCheck} color="#fb7185" />
     </div>
 
+    <div className="panel mb-5 overflow-hidden p-5 md:p-6">
+      <div className="relative flex min-h-[150px] flex-col justify-between gap-5 overflow-hidden rounded-2xl border border-indigo-400/10 bg-[#070d1d] p-5 md:flex-row md:items-center">
+        <div className="world-grid absolute inset-0 opacity-80" aria-hidden="true" />
+        <div className="relative z-10"><div className="kicker mb-2 text-cyan-300">Global operations</div><div className="display-font text-xl font-semibold text-white">Your connected footprint</div><div className="mt-2 text-[11px] text-slate-500">Coverage is calculated from the merchant records in this workspace.</div></div>
+        <div className="relative z-10 flex flex-wrap gap-2 md:max-w-[52%] md:justify-end">{Array.from(new Set(tenantMerchants.map((merchant) => merchant.country))).length ? Array.from(new Set(tenantMerchants.map((merchant) => merchant.country))).map((country) => <span key={country} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-200">{country}</span>) : <span className="rounded-xl border border-dashed border-white/10 px-4 py-3 text-[11px] text-slate-500">No merchant regions connected yet</span>}</div>
+      </div>
+    </div>
+
     <div className="mb-5 grid gap-5 xl:grid-cols-[1.5fr_.8fr]">
       <div className="panel relative overflow-hidden p-5 md:p-6">
         <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-violet-500/10 blur-3xl" />
@@ -562,7 +568,8 @@ function Dashboard() {
           <div><div className="kicker mb-1 text-violet-300">Payment intelligence</div><div className="text-base font-semibold text-white">Live payment activity</div><div className="mt-1 text-[11px] text-slate-500">Calculated from transactions currently available to this workspace.</div></div>
           <div className="flex items-center gap-1 rounded-xl border border-white/5 bg-white/[.03] p-1">{['24H','7D','30D','90D'].map((x)=><button key={x} onClick={()=>setRange(x)} className={`rounded-lg px-3 py-1.5 text-[10px] font-bold ${range===x?'bg-violet-500/20 text-violet-200':'text-slate-500'}`}>{x}</button>)}</div>
         </div>
-        <div className="relative h-[245px]">
+          <div className="relative h-[245px]">
+            {!chartValues.length && <div className="absolute inset-0 grid place-items-center rounded-xl border border-dashed border-white/[.10] bg-white/[.015] text-center"><div><div className="text-sm font-medium text-slate-300">No payment records yet</div><div className="mt-1 text-[11px] text-slate-500">Connect a payment source or add a verified transaction to populate this view.</div></div></div>}
           <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-slate-600"><span>{formatDashboardMoney(metrics.totalVolume)}</span><span>75%</span><span>50%</span><span>25%</span><span>$0</span></div>
           <div className="ml-12 h-full"><div className="flex h-full flex-col justify-between">{[0,1,2,3,4].map(i=><div className="border-t border-dashed border-white/[.06]" key={i}/>)}</div><div className="absolute bottom-5 left-12 right-0 top-0"><Sparkline values={chartValues} color="#8b5cf6" fill/><div className="absolute bottom-[-22px] left-0 right-0 flex justify-between text-[10px] text-slate-600">{['1','2','3','4','5','6','Now'].map(x=><span key={x}>{x}</span>)}</div></div></div>
         </div>
@@ -585,7 +592,7 @@ function Dashboard() {
       </div>
     </div>
 
-    {briefOpen&&<Modal title="Live workspace brief" onClose={()=>setBriefOpen(false)}><div className="space-y-4 text-sm leading-6 text-slate-300"><p><b className="text-white">Current picture:</b> {formatDashboardMoney(metrics.totalVolume)} across {tenantTransactions.length} available payment records, with {metrics.captured} captured and {metrics.review} requiring review.</p><div className="rounded-xl border border-violet-400/20 bg-violet-500/10 p-4"><div className="mb-1 flex items-center gap-2 text-violet-300"><Sparkles size={14}/> FinOS AI signal</div><div>This brief is calculated from the current workspace records; no synthetic totals are inserted.</div></div></div></Modal>}
+    {briefOpen&&<Modal title="Live workspace brief" onClose={()=>setBriefOpen(false)}><div className="space-y-4 text-sm leading-6 text-slate-300"><p><b className="text-white">Current picture:</b> {formatDashboardMoney(metrics.totalVolume)} across {tenantTransactions.length} available payment records, with {metrics.captured} captured and {metrics.review} requiring review.</p><div className="rounded-xl border border-violet-400/20 bg-violet-500/10 p-4"><div className="mb-1 flex items-center gap-2 text-violet-300"><Sparkles size={14}/> FinOS AI signal</div><div>This brief is calculated from the current workspace records; only current workspace records are included.</div></div></div></Modal>}
   </div>;
 }
 
@@ -1248,7 +1255,7 @@ function AssistantPage() {
     });
     setMessage('');
   };
-  return <div className="mx-auto max-w-[1000px]"><SectionHeader eyebrow="Command center / AI" title="Ask FinOS anything." description="A workspace-aware assistant for fast operational answers, grounded in the mock financial data already in your workspace."/><div className="panel overflow-hidden"><div className="flex min-h-[420px] flex-col space-y-4 p-5 md:p-7">{messages.map((item, index) => <div key={index} className={`max-w-[80%] rounded-xl p-4 text-[13px] leading-6 ${item.role === 'user' ? 'ml-auto bg-[#183947] text-[#c8e1e6]' : 'bg-[#10283a] text-[#a9c0cb]'}`}><div className="kicker mb-1">{item.role === 'user' ? 'You' : 'FinOS AI'}</div>{item.text}</div>)}<div className="mt-auto flex flex-wrap gap-2 pt-4">{['What needs review?', 'How are customers doing?', 'Show merchant growth'].map((prompt) => <button key={prompt} onClick={() => { setMessage(prompt); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid={`button-prompt-${prompt.toLowerCase().replaceAll(' ', '-')}`}>{prompt}</button>)}</div></div><div className="flex gap-2 border-t border-[#1b3448] p-4"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-sm" placeholder="Ask about your operation..." data-testid="input-assistant-message"/><button onClick={send} className="btn-primary grid h-10 w-10 place-items-center rounded-lg" data-testid="button-send-assistant"><Send size={15}/></button></div></div></div>;
+  return <div className="mx-auto max-w-[1000px]"><SectionHeader eyebrow="Command center / AI" title="Ask FinOS anything." description="A workspace-aware assistant for fast operational answers, grounded in the records and knowledge connected to this workspace."/><div className="panel overflow-hidden"><div className="flex min-h-[420px] flex-col space-y-4 p-5 md:p-7">{messages.map((item, index) => <div key={index} className={`max-w-[80%] rounded-xl p-4 text-[13px] leading-6 ${item.role === 'user' ? 'ml-auto bg-[#183947] text-[#c8e1e6]' : 'bg-[#10283a] text-[#a9c0cb]'}`}><div className="kicker mb-1">{item.role === 'user' ? 'You' : 'FinOS AI'}</div>{item.text}</div>)}<div className="mt-auto flex flex-wrap gap-2 pt-4">{['What needs review?', 'How are customers doing?', 'Show merchant growth'].map((prompt) => <button key={prompt} onClick={() => { setMessage(prompt); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid={`button-prompt-${prompt.toLowerCase().replaceAll(' ', '-')}`}>{prompt}</button>)}</div></div><div className="flex gap-2 border-t border-[#1b3448] p-4"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-sm" placeholder="Ask about your operation..." data-testid="input-assistant-message"/><button onClick={send} className="btn-primary grid h-10 w-10 place-items-center rounded-lg" data-testid="button-send-assistant"><Send size={15}/></button></div></div></div>;
 }
 
 function Login({ onLogin }: { onLogin: () => void }) {
