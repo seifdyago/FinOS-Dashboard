@@ -202,8 +202,12 @@ const employeeRoleKey = (role: string) => role.trim().toLowerCase().replace(/[^a
 const employeeAvatarUrl = (employee: Pick<Employee, 'id' | 'name' | 'avatar' | 'role'>) => {
   const custom = (employee.avatar || '').trim();
   if (/^https?:\/\//i.test(custom) || custom.startsWith('/')) return custom;
-  const seed = `${employee.name || employee.id}-${employee.role || 'FinOS'}`;
-  return `https://api.dicebear.com/9.x/personas/svg?seed=${encodeURIComponent(seed)}&backgroundType=gradientLinear&radius=50&eyes=variant01,variant02,variant03,variant04&mouth=variant01,variant02,variant03`;
+  const role = `${employee.role || ''} ${employee.id || ''}`.toLowerCase();
+  if (/security|cyber|audit|legal|compliance|risk|fraud/.test(role)) return '/avatars/security.jpg';
+  if (/engineer|data|intelligence|prompt|knowledge|ai/.test(role)) return '/avatars/engineering.jpg';
+  if (/hr|recruit|talent|learning|performance|payroll|people|growth|marketing|sales|seo|content/.test(role)) return '/avatars/people-growth.jpg';
+  if (/support|success|customer|merchant|onboarding|account/.test(role)) return '/avatars/customer-success.jpg';
+  return '/avatars/leadership.jpg';
 };
 
 const accountAvatarUrl = (user: { name: string; avatar?: string }) => {
