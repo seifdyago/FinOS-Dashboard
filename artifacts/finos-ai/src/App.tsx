@@ -1365,13 +1365,12 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setError('An ID/document attachment is required for every new account.');
       return;
     }
-    if (accountType !== 'company') {
-      setError('Individual account verification is not enabled yet. Please use company onboarding.');
-      return;
-    }
     setLoading(true);
     try {
       const normalizedEmail = normalizeEmail(email);
+      const workspaceName = accountType === 'company'
+        ? companyName.trim()
+        : `${fullName.trim()} Merchant Workspace`;
       const uploadResponse = await fetch('/api/onboarding/document-upload-url', {
         method: 'POST',
         credentials: 'include',
@@ -1401,7 +1400,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          name: companyName.trim(),
+          name: workspaceName,
           full_name: fullName.trim(),
           email: normalizedEmail,
           password,
@@ -1409,8 +1408,8 @@ function Login({ onLogin }: { onLogin: () => void }) {
           idNumber: idNumber.trim(),
           documentReference: uploadPayload.storage_key,
           documentType: idDocument.type || 'identity_document',
-          industry,
-          company_size: companySize,
+          industry: accountType === 'company' ? industry : 'merchant',
+          company_size: accountType === 'company' ? companySize : 'individual',
           subscription,
         }),
       });
@@ -1420,14 +1419,14 @@ function Login({ onLogin }: { onLogin: () => void }) {
         return;
       }
       setOnboarding(false);
-      setPendingRegistration({ companyName: companyName.trim(), email: normalizedEmail });
+      setPendingRegistration({ companyName: workspaceName, email: normalizedEmail });
       setStep(1);
       setPassword('');
       setConfirmPassword('');
       setIdDocument(null);
       setFullName('');
       setError('');
-      toast.success('Company submitted. Security review is required before sign-in.');
+      toast.success(`${accountType === 'company' ? 'Company' : 'Merchant account'} submitted. Security review is required before sign-in.`);
     } catch {
       setError('Unable to reach the onboarding server. Please try again.');
     } finally {
