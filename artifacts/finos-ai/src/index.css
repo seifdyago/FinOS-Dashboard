@@ -127,6 +127,13 @@ button { cursor: pointer; }
 .world-grid { background: radial-gradient(circle at 18% 42%, rgba(34,211,238,.65) 0 2px, transparent 3px), radial-gradient(circle at 38% 28%, rgba(124,58,237,.8) 0 2px, transparent 3px), radial-gradient(circle at 58% 54%, rgba(34,211,238,.75) 0 2px, transparent 3px), radial-gradient(circle at 77% 34%, rgba(124,58,237,.75) 0 2px, transparent 3px), linear-gradient(90deg, transparent 0 9%, rgba(69,89,164,.12) 10% 10.2%, transparent 10.4% 23%, rgba(69,89,164,.12) 24% 24.2%, transparent 24.4% 42%, rgba(69,89,164,.12) 43% 43.2%, transparent 43.4% 61%, rgba(69,89,164,.12) 62% 62.2%, transparent 62.4% 80%, rgba(69,89,164,.12) 81% 81.2%, transparent 81.4%), radial-gradient(ellipse at center, rgba(51,88,185,.16), transparent 60%); }
 .map-land { fill: rgba(37, 77, 145, .28); stroke: rgba(87, 178, 255, .62); stroke-width: .35; vector-effect: non-scaling-stroke; }
 .map-node { fill: #67e8f9; stroke: #dffbff; stroke-width: .55; filter: drop-shadow(0 0 3px #22d3ee); }
+.map-route { fill: none; stroke: rgba(103, 232, 249, .42); stroke-width: .22; stroke-dasharray: 1.2 1.2; vector-effect: non-scaling-stroke; animation: routeFlow 3.2s linear infinite; }
+.map-hub { fill: #a78bfa; stroke: #f5f3ff; stroke-width: .65; filter: drop-shadow(0 0 4px #8b5cf6); vector-effect: non-scaling-stroke; }
+.map-avatar { z-index: 2; width: 30px; height: 30px; transform: translate(-50%, -50%); border-radius: 999px; border: 2px solid rgba(103,232,249,.85); background: #0b1b32; box-shadow: 0 0 0 3px rgba(34,211,238,.10), 0 0 18px rgba(34,211,238,.24); animation: avatarPulse 2.4s ease-in-out infinite; }
+.map-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.map-avatar span { position: absolute; right: -1px; bottom: -1px; width: 7px; height: 7px; border: 1px solid #07111f; border-radius: 999px; background: #34d399; }
+@keyframes routeFlow { to { stroke-dashoffset: -8; } }
+@keyframes avatarPulse { 0%,100% { box-shadow: 0 0 0 3px rgba(34,211,238,.10), 0 0 18px rgba(34,211,238,.20); } 50% { box-shadow: 0 0 0 5px rgba(34,211,238,.05), 0 0 26px rgba(34,211,238,.36); } }
 .btn-quiet { background:#14283a; color:#b6c8d8; border:1px solid #25455b; transition:background .18s ease,color .18s ease; }
 .btn-quiet:hover { background:#1d384c; color:#eef6fb; }
 .login-card { padding: 2.25rem; border: 1px solid rgba(86,157,181,.24); border-radius: 22px; background: linear-gradient(145deg, rgba(15,32,52,.82), rgba(8,20,36,.72)); box-shadow: 0 24px 70px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.03); }

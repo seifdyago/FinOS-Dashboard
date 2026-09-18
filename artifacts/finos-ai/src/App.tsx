@@ -409,14 +409,24 @@ function TinyBars({ color = '#8b5cf6' }: { color?: string }) {
   return <div className="flex h-9 items-end gap-[3px]">{[42,57,38,75,65,82,59,91,73,88,79,100].map((h,i)=><div key={i} className="w-1.5 rounded-t-sm" style={{height:`${h}%`, background:i===11 ? '#eef8fa' : color, opacity:i===11 ? 1 : .65}} />)}</div>;
 }
 
-function WorldMap({ countries }: { countries: string[] }) {
+function WorldMap({ merchants, customers }: { merchants: MerchantRecord[]; customers: CustomerRecord[] }) {
   const points: Record<string, [number, number]> = { US: [18, 44], CA: [22, 28], MX: [24, 57], BR: [35, 70], IT: [51, 42], DE: [50, 34], UK: [47, 29], AU: [83, 73], KR: [84, 41] };
+  const nodes = merchants.map((merchant, index) => {
+    const customer = customers.find((item) => item.merchant === merchant.name);
+    const point = points[merchant.country] || [18 + ((index * 17) % 68), 24 + ((index * 23) % 48)];
+    return { merchant, customer, point, index };
+  });
+  const hub: [number, number] = [50, 47];
   return <div className="relative h-full min-h-[220px] overflow-hidden rounded-2xl border border-indigo-400/10 bg-[#060b1c]">
     <svg viewBox="0 0 100 70" preserveAspectRatio="none" className="absolute inset-0 h-full w-full opacity-90" aria-label="Global operations map">
       <path className="map-land" d="M8 21 16 13 27 15 32 24 27 31 22 35 23 45 17 51 11 44 12 36 6 30ZM31 13 39 18 42 27 38 34 34 29 29 23ZM45 22 53 19 58 25 55 35 51 38 49 47 44 43 45 34 42 29ZM57 14 68 13 76 21 73 31 68 34 65 42 59 36 61 27 56 22ZM70 44 78 42 86 48 88 57 83 63 77 58 71 53ZM35 47 41 52 43 63 38 69 33 61 31 53Z" />
-      {countries.map((country) => { const point = points[country]; return point ? <circle key={country} cx={point[0]} cy={point[1]} r="1.7" className="map-node" /> : null; })}
+      <g className="map-routes">{nodes.map(({ point, index }) => <path key={`route-${index}`} d={`M ${hub[0]} ${hub[1]} Q ${(hub[0] + point[0]) / 2} ${Math.min(hub[1], point[1]) - 10} ${point[0]} ${point[1]}`} className="map-route" />)}</g>
+      <circle cx={hub[0]} cy={hub[1]} r="2.5" className="map-hub" />
+      {nodes.map(({ point, merchant }) => <circle key={merchant.id} cx={point[0]} cy={point[1]} r="1.8" className="map-node" />)}
     </svg>
-    <div className="absolute bottom-3 left-4 flex items-center gap-3 text-[10px] text-slate-500"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_8px_#67e8f9]"/>Connected regions</span><span>{countries.length} countries</span></div>
+    {nodes.map(({ point, merchant, customer, index }) => <div key={`avatar-${merchant.id}`} className="map-avatar absolute" style={{ left: `${point[0]}%`, top: `${point[1]}%`, animationDelay: `${index * 120}ms` }} title={`${customer?.name || merchant.name} · ${merchant.country}`}><img src={`https://api.dicebear.com/9.x/personas/svg?seed=${encodeURIComponent(customer?.name || merchant.name)}&backgroundType=gradientLinear&radius=50`} alt={`${customer?.name || merchant.name} profile`} referrerPolicy="no-referrer"/><span /></div>)}
+    <div className="absolute left-3 top-3 rounded-lg border border-cyan-300/15 bg-[#07152a]/85 px-2.5 py-2 text-[10px] text-slate-400 backdrop-blur"><div className="flex items-center gap-1.5 text-cyan-200"><i className="live-dot h-1.5 w-1.5 rounded-full bg-cyan-300"/> Live network</div><div className="mt-1 text-[9px] text-slate-500">Owner view · merchant signals</div></div>
+    <div className="absolute bottom-3 left-4 flex items-center gap-3 text-[10px] text-slate-500"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_8px_#67e8f9]"/>Connected regions</span><span>{new Set(merchants.map((merchant) => merchant.country)).size} countries</span><span>{merchants.length} subscribers</span></div>
   </div>;
 }
 
@@ -492,7 +502,7 @@ function formatDashboardMoney(value: number): string {
 }
 
 function Dashboard() {
-  const { tenant, preferences, transactions: tenantTransactions, customers: tenantCustomers, merchants: tenantMerchants } = usePlatform();
+  const { tenant, user, preferences, transactions: tenantTransactions, customers: tenantCustomers, merchants: tenantMerchants } = usePlatform();
   const { employees: roster } = useEmployees();
   const [range, setRange] = useState('7D');
   const [briefOpen, setBriefOpen] = useState(false);
@@ -565,7 +575,7 @@ function Dashboard() {
     </div>
 
     <div className="mb-5 grid gap-5 xl:grid-cols-[1.45fr_.72fr]">
-      <div className="panel overflow-hidden p-5 md:p-6"><div className="mb-4 flex items-start justify-between"><div><div className="kicker mb-2 text-cyan-300">Global operations</div><div className="display-font text-xl font-semibold text-white">Live network</div><div className="mt-1 text-[11px] text-slate-500">Connected regions from current merchant records.</div></div><Globe2 size={21} className="text-cyan-300"/></div><WorldMap countries={Array.from(new Set(tenantMerchants.map((merchant) => merchant.country)))} /></div>
+      {isPlatformOwner(user) && <div className="panel overflow-hidden p-5 md:p-6"><div className="mb-4 flex items-start justify-between"><div><div className="kicker mb-2 text-cyan-300">Global operations / owner only</div><div className="display-font text-xl font-semibold text-white">Live network</div><div className="mt-1 text-[11px] text-slate-500">Live subscriber locations from current merchant records.</div></div><Globe2 size={21} className="text-cyan-300"/></div><WorldMap merchants={tenantMerchants} customers={tenantCustomers} /></div>}
       <div className="panel p-5 md:p-6"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-2 text-violet-300">AI workforce</div><div className="text-sm font-semibold text-white">Top AI employees</div></div><Link href="/ai-employees" className="text-[10px] text-violet-300">View all</Link></div><div className="space-y-3">{roster.slice(0, 5).map((employee) => <Link key={employee.id} href={`/ai-employees/${employee.id}/details`} className="flex items-center gap-3 rounded-xl border border-white/[.05] bg-white/[.02] p-2.5 hover:bg-white/[.05]"><img src={employeeAvatarUrl(employee)} alt="" className="h-9 w-9 rounded-full object-cover ring-1 ring-violet-400/30"/><div className="min-w-0 flex-1"><div className="truncate text-[11px] font-medium text-slate-200">{employee.name}</div><div className="truncate text-[10px] text-slate-500">{employee.role}</div></div><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"/></Link>)}{roster.length === 0 && <div className="rounded-xl border border-dashed border-white/10 px-3 py-6 text-center text-[11px] text-slate-500">No AI employees connected yet.</div>}</div></div>
     </div>
 
