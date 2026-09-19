@@ -71,6 +71,14 @@ export type SubscriptionLike = Pick<Subscription, "plan" | "status">;
 
 export const SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due", "canceled", "suspended", "pending_review"] as const;
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
+export const LIFETIME_ACCOUNT_EMAILS = new Set([
+  "seifdyago@gmail.com",
+  "aflatonhh661@gmail.com",
+  "samoraysam378@gmail.com",
+]);
+export function isSubscriptionExpired(currentPeriodEnd: Date | null | undefined, now = new Date()): boolean {
+  return Boolean(currentPeriodEnd && currentPeriodEnd.getTime() <= now.getTime());
+}
 
 export function getSubscriptionPlan(plan: string): SubscriptionPlanDefinition | undefined {
   // Keep existing production subscriptions working while new onboarding uses the explicit plans.

@@ -34,6 +34,7 @@ import {
 import {
   sendPasswordResetCode,
 } from "../lib/password-reset-delivery";
+import { LIFETIME_ACCOUNT_EMAILS, isSubscriptionExpired } from "../lib/subscription-plans";
 
 const PASSWORD_RESET_OTP_TTL_MS =
   10 * 60 * 1000;
@@ -728,6 +729,26 @@ router.post(
           error:
             "Invalid email or password.",
         });
+        return;
+      }
+
+      const [subscription] = await db
+        .select({ status: subscriptions.status, currentPeriodEnd: subscriptions.currentPeriodEnd })
+        .from(subscriptions)
+        .where(eq(subscriptions.organizationId, user.organizationId))
+        .limit(1);
+      if (LIFETIME_ACCOUNT_EMAILS.has(email)) {
+        await db.update(subscriptions).set({ status: "active", currentPeriodEnd: null, updatedAt: new Date() }).where(eq(subscriptions.organizationId, user.organizationId));
+        if (user.status !== "active") {
+          await db.update(organizations).set({ status: "active", updatedAt: new Date() }).where(eq(organizations.id, user.organizationId));
+          await db.update(users).set({ status: "active", updatedAt: new Date() }).where(eq(users.id, user.id));
+          user = { ...user, status: "active" };
+        }
+      } else if (isSubscriptionExpired(subscription?.currentPeriodEnd)) {
+        await db.update(subscriptions).set({ status: "suspended", updatedAt: new Date() }).where(eq(subscriptions.organizationId, user.organizationId));
+        await db.update(organizations).set({ status: "suspended", updatedAt: new Date() }).where(eq(organizations.id, user.organizationId));
+        await db.update(users).set({ status: "suspended", updatedAt: new Date() }).where(eq(users.id, user.id));
+        res.status(403).json({ error: "Your subscription has expired. Submit a renewal payment to reactivate the account.", status: "suspended" });
         return;
       }
 

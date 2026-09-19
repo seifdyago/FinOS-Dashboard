@@ -3,6 +3,7 @@ export * from "./users.js";
 export * from "./departments.js";
 export * from "./employees.js";
 export * from "./subscriptions.js";
+export * from "./payment-deposits.js";
 export * from "./knowledge-documents.js";
 export * from "./platform-admins.js";
 export * from "./activity-events.js";

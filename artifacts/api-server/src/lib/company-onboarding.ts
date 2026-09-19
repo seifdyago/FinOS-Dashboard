@@ -3,6 +3,7 @@ import {
   db,
   organizations,
   subscriptions,
+  paymentDeposits,
   users,
   type Organization,
   type User,
@@ -33,6 +34,10 @@ export type CompanyOnboardingInput = {
   idNumber: string;
   documentReference: string;
   documentType: string;
+  payment_method: "wallet_01092122639" | "wallet_01024825088" | "bank_9914624";
+  transfer_reference: string;
+  receipt_reference: string;
+  receipt_type: string;
 };
 
 export type CompanyOnboardingResult = {
@@ -149,6 +154,10 @@ export async function createCompanyOnboarding(
   const idNumber = parsed.idNumber.trim();
   const documentReference = parsed.documentReference.trim();
   const documentType = parsed.documentType.trim() || "identity_document";
+  const paymentMethod = parsed.payment_method;
+  const transferReference = parsed.transfer_reference.trim();
+  const receiptReference = parsed.receipt_reference.trim();
+  const receiptType = parsed.receipt_type.trim();
   const requestedDomain =
     getEmailDomain(email);
 
@@ -160,7 +169,10 @@ export async function createCompanyOnboarding(
     !password ||
     !phone ||
     !/^\d{14}$/.test(idNumber) ||
-    !documentReference
+    !documentReference ||
+    !transferReference ||
+    !receiptReference ||
+    !receiptType
   ) {
     throw new Error(
       "Company name, email, password, industry, and company size are required.",
@@ -174,6 +186,13 @@ export async function createCompanyOnboarding(
     throw new Error(
       "The uploaded identity document could not be verified in private storage.",
     );
+  }
+
+  if (
+    !receiptReference.startsWith("/objects/uploads/onboarding/") ||
+    !(await privateObjectStorage.objectExists(receiptReference))
+  ) {
+    throw new Error("The payment receipt could not be verified in private storage.");
   }
 
   if (
@@ -352,6 +371,18 @@ export async function createCompanyOnboarding(
             verificationStatus:
               "pending_review",
           });
+
+        await transaction.insert(paymentDeposits).values({
+          organizationId: organization.id,
+          submittedByUserId: user.id,
+          plan: requestedPlan,
+          amountCents: priceCents,
+          paymentMethod,
+          transferReference,
+          receiptReference,
+          receiptType,
+          status: "pending_review",
+        });
 
         return {
           organization,

@@ -15,4 +15,8 @@ export type CreateCompanyOnboardingRequestSubscription = typeof CreateCompanyOnb
 export const CreateCompanyOnboardingRequestSubscription = {
   basic: 'basic',
   premium: 'premium',
+  merchant_basic: 'merchant_basic',
+  merchant_premium: 'merchant_premium',
+  company_15: 'company_15',
+  company_32: 'company_32',
 } as const;

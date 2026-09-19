@@ -1250,30 +1250,33 @@ function NotificationsPage() {
 }
 
 function AssistantPage() {
-  const { tenant, user, transactions, customers, merchants, reports } = usePlatform();
+  const { tenant, user } = usePlatform();
+  const { employees } = useEmployees();
+  const chief = employees.find((employee) => employee.id === 'ceo') || employees[0];
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([{ role: 'assistant', text: "I'm FinOS AI. Ask me about payments, customer health, merchant performance, or your latest reports." }]);
-  const answer = (question: string) => {
-    const normalized = question.toLowerCase();
-    if (normalized.includes('transaction') || normalized.includes('payment')) return `There are ${transactions.length} payment records in this workspace. ${transactions.filter((item) => item.status === 'Review').length} currently need review, with ${transactions.filter((item) => item.status === 'Captured').length} captured successfully.`;
-    if (normalized.includes('customer')) return `Customer health is currently ${Math.round(customers.filter((item) => item.health === 'Healthy').length / Math.max(customers.length, 1) * 100)}% healthy. ${customers.filter((item) => item.health === 'At risk').length} account(s) are at risk.`;
-    if (normalized.includes('merchant')) return `${merchants.length} merchants are connected. The strongest growth signal is ${merchants.sort((a, b) => b.growth - a.growth)[0]?.name || 'not available'} at ${merchants.sort((a, b) => b.growth - a.growth)[0]?.growth || 0}%.`;
-    if (normalized.includes('report')) return `You have ${reports.length} saved reports. The latest is •${reports[0]?.name || 'not available'}•.`;
-    return 'I can summarize transactions, customer health, merchant growth, or your saved reports. Try asking "What needs review?" or "How are merchants doing?"';
-  };
-  const send = () => {
+  const [loading, setLoading] = useState(false);
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([{ role: 'assistant', text: 'أنا رئيس فريق الموظفين في FinOS. أراجع السياق التشغيلي معك، وأحوّل طلبك إلى خطوات عملية وأرفع المخاطر التي تحتاج قرارًا من المالك.' }]);
+  const send = async () => {
     if (!message.trim()) return;
     const question = message.trim();
-    setMessages((current) => [...current, { role: 'user', text: question }, { role: 'assistant', text: answer(question) }]);
+    setMessages((current) => [...current, { role: 'user', text: question }]);
+    setMessage('');
+    setLoading(true);
+    try {
+      const response = await fetch('/api/ai/chat', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ message: question, employee: chief, conversation: messages.slice(-12) }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'The chief assistant is unavailable.');
+      setMessages((current) => [...current, { role: 'assistant', text: typeof payload?.reply === 'string' ? payload.reply : 'لم أستطع إعداد إجابة الآن.' }]);
+    } catch (error) { setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'تعذر تشغيل رئيس الموظفين الآن.' }]); }
+    finally { setLoading(false); }
     reportWorkspaceActivity(tenant.id, user.email, {
       event_type: 'ai_employee_usage',
       metadata: { surface: 'workspace_assistant', questionLength: question.length },
       usage_metric_type: 'ai_requests',
       usage_value: 1,
     });
-    setMessage('');
   };
-  return <div className="mx-auto max-w-[1000px]"><SectionHeader eyebrow="Command center / AI" title="Ask FinOS anything." description="A workspace-aware assistant for fast operational answers, grounded in the records and knowledge connected to this workspace."/><div className="panel overflow-hidden"><div className="flex min-h-[420px] flex-col space-y-4 p-5 md:p-7">{messages.map((item, index) => <div key={index} className={`max-w-[80%] rounded-xl p-4 text-[13px] leading-6 ${item.role === 'user' ? 'ml-auto bg-[#183947] text-[#c8e1e6]' : 'bg-[#10283a] text-[#a9c0cb]'}`}><div className="kicker mb-1">{item.role === 'user' ? 'You' : 'FinOS AI'}</div>{item.text}</div>)}<div className="mt-auto flex flex-wrap gap-2 pt-4">{['What needs review?', 'How are customers doing?', 'Show merchant growth'].map((prompt) => <button key={prompt} onClick={() => { setMessage(prompt); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid={`button-prompt-${prompt.toLowerCase().replaceAll(' ', '-')}`}>{prompt}</button>)}</div></div><div className="flex gap-2 border-t border-[#1b3448] p-4"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-sm" placeholder="Ask about your operation..." data-testid="input-assistant-message"/><button onClick={send} className="btn-primary grid h-10 w-10 place-items-center rounded-lg" data-testid="button-send-assistant"><Send size={15}/></button></div></div></div>;
+  return <div className="mx-auto max-w-[1000px]"><SectionHeader eyebrow="Command center / AI" title="Ask the chief of staff." description={`${chief?.name || 'FinOS AI'} is the chief employee: it coordinates the workforce, uses the real employee prompt, and answers with workspace context.`}/><div className="panel overflow-hidden"><div className="flex min-h-[420px] flex-col space-y-4 p-5 md:p-7">{messages.map((item, index) => <div key={index} className={`max-w-[80%] rounded-xl p-4 text-[13px] leading-6 ${item.role === 'user' ? 'ml-auto bg-[#183947] text-[#c8e1e6]' : 'bg-[#10283a] text-[#a9c0cb]'}`}><div className="kicker mb-1">{item.role === 'user' ? 'You' : chief?.name || 'Chief assistant'}</div>{item.text}</div>)}<div className="mt-auto flex flex-wrap gap-2 pt-4">{['What needs review?', 'Give me the executive priorities', 'Which employee needs support?'].map((prompt) => <button key={prompt} onClick={() => setMessage(prompt)} className="btn-quiet rounded-lg px-3 py-2 text-[11px]">{prompt}</button>)}</div></div><div className="flex gap-2 border-t border-[#1b3448] p-4"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} disabled={loading || !chief} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-sm" placeholder={loading ? 'Chief assistant is thinking...' : 'Ask the chief about your operation...'} data-testid="input-assistant-message"/><button onClick={() => void send()} disabled={loading || !chief} className="btn-primary grid h-10 w-10 place-items-center rounded-lg disabled:opacity-50" data-testid="button-send-assistant"><Send size={15}/></button></div></div></div>;
 }
 
 function Login({ onLogin }: { onLogin: () => void }) {
@@ -1299,6 +1302,9 @@ function Login({ onLogin }: { onLogin: () => void }) {
   const [subscription, setSubscription] = useState<'merchant_basic' | 'merchant_premium' | 'company_15' | 'company_32'>('company_15');
   const [fullName, setFullName] = useState('');
   const [idDocument, setIdDocument] = useState<File | null>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'wallet_01092122639' | 'wallet_01024825088' | 'bank_9914624'>('wallet_01092122639');
+  const [transferReference, setTransferReference] = useState('');
   const [error, setError] = useState('');
   const [pendingRegistration, setPendingRegistration] = useState<PendingRegistration | null>(null);
 
@@ -1374,6 +1380,8 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setPhone('');
     setIdNumber('');
     setIdDocument(null);
+    setReceiptFile(null);
+    setTransferReference('');
   };
 
   const nextOnboardingStep = () => {
@@ -1391,8 +1399,8 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
   const createAccount = async () => {
     setError('');
-    if (!idDocument) {
-      setError('An ID/document attachment is required for every new account.');
+    if (!idDocument || !receiptFile || !transferReference.trim()) {
+      setError('Identity document, payment receipt, and transfer reference are required.');
       return;
     }
     setLoading(true);
@@ -1425,6 +1433,17 @@ function Login({ onLogin }: { onLogin: () => void }) {
         setError('The identity document could not be uploaded securely. Please try again.');
         return;
       }
+      const receiptUploadResponse = await fetch('/api/onboarding/document-upload-url', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ original_file_name: receiptFile.name, mime_type: receiptFile.type || 'application/octet-stream', size_bytes: receiptFile.size }),
+      });
+      const receiptUpload = await receiptUploadResponse.json().catch(() => ({}));
+      if (!receiptUploadResponse.ok || typeof receiptUpload?.upload_url !== 'string' || typeof receiptUpload?.storage_key !== 'string') {
+        setError(typeof receiptUpload?.error === 'string' ? receiptUpload.error : 'Unable to prepare the payment receipt upload.');
+        return;
+      }
+      const receiptBinaryUpload = await fetch(receiptUpload.upload_url, { method: 'PUT', headers: { 'Content-Type': receiptFile.type || 'application/octet-stream' }, body: receiptFile });
+      if (!receiptBinaryUpload.ok) { setError('The payment receipt could not be uploaded securely. Please try again.'); return; }
       const response = await fetch('/api/onboarding/companies', {
         method: 'POST',
         credentials: 'include',
@@ -1441,6 +1460,10 @@ function Login({ onLogin }: { onLogin: () => void }) {
           industry: accountType === 'company' ? industry : 'merchant',
           company_size: accountType === 'company' ? companySize : 'individual',
           subscription,
+          payment_method: paymentMethod,
+          transfer_reference: transferReference.trim(),
+          receipt_reference: receiptUpload.storage_key,
+          receipt_type: receiptFile.type || 'application/octet-stream',
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -1454,6 +1477,8 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setPassword('');
       setConfirmPassword('');
       setIdDocument(null);
+      setReceiptFile(null);
+      setTransferReference('');
       setFullName('');
       setError('');
       toast.success(`${accountType === 'company' ? 'Company' : 'Merchant account'} submitted. Security review is required before sign-in.`);
@@ -1647,7 +1672,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <label><span className="kicker mb-2 block">Subscription</span><select value={subscription} onChange={(event) => setSubscription(event.target.value as 'merchant_basic' | 'merchant_premium' | 'company_15' | 'company_32')} className={fieldClass}><option value="company_15">Company — 15 employees — $300/mo</option><option value="company_32">Company — 32 employees — $600/mo</option></select></label>
         <label><span className="kicker mb-2 block">ID card / identity document <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setIdDocument(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-individual-id-document"/>{idDocument && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{idDocument.name} • ready to attach</span>}</label>
       </div>}
-      {step === 3 && <div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Phone</span><span className="text-right text-[#e2e8f0]">{phone}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">National ID</span><span className="text-right text-[#e2e8f0]">{idNumber}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">Password is sent securely to the onboarding backend, where the server stores only a password hash and salt. Registration and identity verification are handled by the server.</div></div></div>}
+      {step === 3 && <div className="space-y-4"><div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Manual payment</div><div className="mb-3 text-[11px] leading-5 text-[#8aa1b0]">Payment is reviewed manually. Choose the destination, send the subscription amount, then upload the receipt and enter its reference.</div><label className="block"><span className="kicker mb-2 block">Transfer destination</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as typeof paymentMethod)} className={fieldClass} data-testid="select-payment-method"><option value="wallet_01092122639">Wallet — حسناء احمد — 01092122639</option><option value="wallet_01024825088">Wallet — حسناء احمد — 01024825088</option><option value="bank_9914624">البنك الأهلي الكويتي / InstaPay — سيف الله محمد هلال — 9914624</option></select></label><label className="mt-4 block"><span className="kicker mb-2 block">Receipt reference</span><input value={transferReference} onChange={(event) => setTransferReference(event.target.value)} className={fieldClass} placeholder="Reference number from the transfer receipt" data-testid="input-transfer-reference"/></label><label className="mt-4 block"><span className="kicker mb-2 block">Payment receipt <span className="normal-case tracking-normal text-[#536f84]">(required)</span></span><input type="file" accept="image/*,.pdf" onChange={(event) => setReceiptFile(event.target.files?.[0] || null)} className="input-dark block w-full rounded-lg px-3 py-2 text-xs" data-testid="input-payment-receipt"/>{receiptFile && <span className="mt-2 block text-[10px] text-[#6fe0bd]">{receiptFile.name}</span>}</label></div><div className="rounded-xl border border-[#3a2a6a] bg-[#0c2130] p-4"><div className="kicker mb-3">Account review</div><div className="space-y-3 text-[12px]"><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Name</span><span className="text-right text-[#e2e8f0]">{fullName}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Email</span><span className="text-right text-[#e2e8f0]">{email}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Phone</span><span className="text-right text-[#e2e8f0]">{phone}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">National ID</span><span className="text-right text-[#e2e8f0]">{idNumber}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">Account</span><span className="text-right text-[#e2e8f0]">{accountType}</span></div>{accountType === 'company' && <div className="flex justify-between gap-4"><span className="text-[#7892a5]">Company</span><span className="text-right text-[#e2e8f0]">{companyName}</span></div>}<div className="flex justify-between gap-4"><span className="text-[#7892a5]">Subscription</span><span className="text-right capitalize text-[#e2e8f0]">{subscription}</span></div><div className="flex justify-between gap-4"><span className="text-[#7892a5]">ID/document</span><span className="text-right text-[#6fe0bd]">{idDocument?.name || 'Missing'}</span></div><div className="mt-4 border-t border-[#214057] pt-3 text-[11px] leading-5 text-[#8aa1b0]">The account remains suspended/pending until Security verifies identity and the owner approves the payment manually.</div></div></div></div>}
       {error && <div className="mt-4 rounded-lg border border-[#6d3840] bg-[#3b2028] px-3 py-2 text-[11px] leading-5 text-[#ffb4aa]" role="alert">{error}</div>}
       <button onClick={step === 3 ? createAccount : nextOnboardingStep} disabled={loading} className="btn-primary mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm">{loading ? <RefreshCw size={15} className="animate-spin"/> : step === 3 ? <UserPlus size={15}/> : <ArrowUpRight size={15}/>} {loading ? 'Creating account...' : step === 3 ? 'Create account' : 'Continue'}</button>
       {step > 1 && <button onClick={() => { setStep((current) => current - 1); setError(''); }} className="btn-quiet mt-2 h-10 w-full rounded-lg text-[11px]">Previous step</button>}
@@ -1934,6 +1959,8 @@ function PlatformAdminPage() {
   const { user } = usePlatform();
   const adminEmail = user.email.trim().toLowerCase();
   const [upgradingOrganizationId, setUpgradingOrganizationId] = useState<string | null>(null);
+  const [paymentDeposits, setPaymentDeposits] = useState<Array<{ id: string; organization_id: string; plan: string; amount_cents: number; payment_method: string; transfer_reference: string; status: string; submitted_at: string; receipt_url: string | null }>>([]);
+  const [depositLoading, setDepositLoading] = useState(true);
   const analyticsQuery = useGetPlatformAnalytics({
     request: {
       headers: { 'x-finos-platform-admin-email': adminEmail },
@@ -1942,6 +1969,15 @@ function PlatformAdminPage() {
   const analytics = analyticsQuery.data;
   const errorData = analyticsQuery.error as { data?: { error?: string }; message?: string } | null;
   const errorMessage = errorData?.data?.error || errorData?.message || 'Platform analytics are unavailable.';
+  const loadPaymentDeposits = async () => {
+    setDepositLoading(true);
+    try {
+      const response = await fetch('/api/platform-admin/payment-deposits', { credentials: 'include', headers: { 'x-finos-platform-admin-email': adminEmail, Accept: 'application/json' } });
+      const payload = await response.json().catch(() => []);
+      if (response.ok && Array.isArray(payload)) setPaymentDeposits(payload);
+    } finally { setDepositLoading(false); }
+  };
+  useEffect(() => { void loadPaymentDeposits(); }, [adminEmail]);
 
   if (analyticsQuery.isLoading) {
     return <div className="mx-auto max-w-[1450px]"><SectionHeader eyebrow="Platform owner" title="Loading platform analytics." description="Checking the platform owner scope and preparing the company portfolio."/><div className="panel flex min-h-[320px] items-center justify-center text-sm text-[#7892a5]"><RefreshCw size={16} className="mr-2 animate-spin text-[#8b5cf6]"/> Loading aggregate metrics...</div></div>;
@@ -2034,6 +2070,19 @@ function PlatformAdminPage() {
     }
   };
 
+  const decidePaymentDeposit = async (depositId: string, decision: 'approved' | 'rejected') => {
+    const label = decision === 'approved' ? 'قبول الإيداع وتفعيل الحساب' : 'رفض الإيداع';
+    if (!window.confirm(`هل تريد ${label}؟`)) return;
+    try {
+      const response = await fetch(`/api/platform-admin/payment-deposits/${encodeURIComponent(depositId)}/decision`, { method: 'POST', credentials: 'include', headers: { 'x-finos-platform-admin-email': adminEmail, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ decision }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to review payment deposit.');
+      toast.success(decision === 'approved' ? 'تم قبول الدفع وتفعيل الحساب' : 'تم رفض الإيداع');
+      await loadPaymentDeposits();
+      await analyticsQuery.refetch();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to review payment deposit.'); }
+  };
+
   return <div className="mx-auto max-w-[1450px]">
     <SectionHeader eyebrow="Platform owner / portfolio intelligence" title="The company network, in view." description="Manage live organization subscriptions with an auditable, owner-only workflow." action={<button onClick={() => void analyticsQuery.refetch()} disabled={analyticsQuery.isFetching} className="btn-quiet flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" data-testid="button-refresh-platform-analytics"><RefreshCw size={13} className={analyticsQuery.isFetching ? 'animate-spin' : ''}/> Refresh portfolio</button>}/>
     {analyticsUnavailable && <div className="mb-6 rounded-xl border border-[#6d3840] bg-[#241923] px-4 py-3 text-[11px] leading-5 text-[#d7a7a8]">Platform API analytics are unavailable right now. The page remains open and is showing the local workspace fallback; connect the backend platform analytics endpoint to see the full company portfolio.</div>}
@@ -2055,6 +2104,7 @@ function PlatformAdminPage() {
       </div>
        <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">Usage foundation</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">AI workforce signals</div></div><Bot size={18} className="text-[#8b5cf6]"/></div><div className="space-y-4"><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">Conversations</span><span className="mono text-[#d9e9ee]">{summary.total_ai_conversations.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#8b5cf6]" style={{ width: `${Math.min(summary.total_ai_conversations ? 100 : 0, 100)}%` }}/></div></div><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">AI requests</span><span className="mono text-[#d9e9ee]">{summary.total_ai_requests.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#34d399]" style={{ width: `${Math.min(summary.total_ai_requests ? 100 : 0, 100)}%` }}/></div></div><div><div className="mb-2 flex justify-between text-[11px]"><span className="text-[#8aa1b0]">Responses</span><span className="mono text-[#d9e9ee]">{summary.total_responses.toLocaleString()}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[#19354a]"><div className="h-full rounded-full bg-[#cb9eeb]" style={{ width: `${Math.min(summary.total_responses ? 100 : 0, 100)}%` }}/></div></div></div></div>
     </div>
+    <div className="panel mb-6 overflow-hidden"><div className="flex items-center justify-between border-b border-[#1b3448] px-5 py-4 md:px-6"><div><div className="text-sm font-semibold text-[#e2e8f0]">Pending payment deposits</div><div className="mt-1 text-[11px] text-[#71899d]">Manual owner review. Approving a deposit activates the account and starts access.</div></div><span className="rounded-full border border-[#4a3a78] bg-[#102c3e] px-2.5 py-1 text-[10px] text-[#8dcbd4]">{paymentDeposits.filter((deposit) => deposit.status === 'pending_review').length} pending</span></div>{depositLoading ? <div className="p-5 text-[11px] text-[#7892a5]">Loading deposits...</div> : paymentDeposits.length === 0 ? <div className="p-5 text-[11px] text-[#7892a5]">No deposits submitted.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left"><thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">Plan / amount</th><th className="px-4 py-3 font-medium">Destination</th><th className="px-4 py-3 font-medium">Reference</th><th className="px-4 py-3 font-medium">Receipt</th><th className="px-6 py-3 text-right font-medium">Action</th></tr></thead><tbody>{paymentDeposits.map((deposit) => <tr key={deposit.id} className="border-b border-[#162d40] last:border-0"><td className="px-6 py-4 text-[12px] text-[#d4e3e8]"><div className="capitalize">{deposit.plan}</div><div className="mt-1 text-[10px] text-[#71899d]">{formatPlatformCurrency(deposit.amount_cents)} • {deposit.status}</div></td><td className="px-4 py-4 text-[11px] text-[#b4c8d2]">{deposit.payment_method}</td><td className="px-4 py-4 mono text-[11px] text-[#b4c8d2]">{deposit.transfer_reference}</td><td className="px-4 py-4">{deposit.receipt_url ? <a href={deposit.receipt_url} target="_blank" rel="noreferrer" className="text-[11px] text-[#6fe0bd] underline">Open receipt</a> : <span className="text-[10px] text-[#a77b82]">Unavailable</span>}</td><td className="px-6 py-4 text-right">{deposit.status === 'pending_review' ? <div className="flex justify-end gap-2"><button onClick={() => void decidePaymentDeposit(deposit.id, 'approved')} className="rounded-lg border border-[#27634e] px-3 py-2 text-[10px] text-[#6fe0bd]">Approve & activate</button><button onClick={() => void decidePaymentDeposit(deposit.id, 'rejected')} className="rounded-lg border border-[#6d3840] px-3 py-2 text-[10px] text-[#ffb4aa]">Reject</button></div> : <span className="text-[10px] text-[#7892a5]">Reviewed</span>}</td></tr>)}</tbody></table></div>}</div>
     <div className="panel mb-6 overflow-hidden"><div className="flex items-center justify-between border-b border-[#1b3448] px-5 py-4 md:px-6"><div><div className="text-sm font-semibold text-[#e2e8f0]">Companies</div><div className="mt-1 text-[11px] text-[#71899d]">Subscription, workforce, knowledge, and activity visibility without entering any customer workspace.</div></div><span className="rounded-full border border-[#4a3a78] bg-[#102c3e] px-2.5 py-1 text-[10px] text-[#8dcbd4]">{companies.length} organizations</span></div><div className="overflow-x-auto"><table className="w-full min-w-[1240px] text-left"><thead><tr className="border-b border-[#1b3448] text-[10px] uppercase tracking-[.14em] text-[#668197]"><th className="px-6 py-3 font-medium">Company</th><th className="px-4 py-3 font-medium">Subscription</th><th className="px-4 py-3 font-medium">Users</th><th className="px-4 py-3 font-medium">AI employees</th><th className="px-4 py-3 font-medium">Top performer</th><th className="px-4 py-3 font-medium">Knowledge</th><th className="px-4 py-3 font-medium">Last activity</th><th className="px-4 py-3 text-right font-medium">State</th><th className="px-6 py-3 text-right font-medium">Action</th></tr></thead><tbody>{companies.map((company) => <tr key={company.id} className="border-b border-[#162d40] last:border-0"><td className="px-6 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#173b48] text-[11px] font-bold text-[#75dbe5]">{company.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><div className="text-[12px] font-semibold text-[#e2e8f0]">{company.name}</div><div className="mt-1 text-[10px] text-[#688399]">Registered {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(company.registration_date))}</div></div></div></td><td className="px-4 py-4"><div className="text-[12px] capitalize text-[#d4e3e8]">{company.subscription_plan}</div><div className="mt-1 text-[10px] text-[#71899d]">{company.subscription_status} • {formatPlatformCurrency(company.monthly_price_cents)}/mo</div></td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.user_count}</td><td className="px-4 py-4 text-[12px] text-[#b4c8d2]">{company.ai_employee_count}</td><td className="px-4 py-4"><div className="text-[12px] text-[#d4e3e8]">{company.top_employee_name || "No scored employee"}</div><div className="mt-1 text-[10px] text-[#71899d]">{company.top_employee_role || "Awaiting activity"}{company.top_employee_performance !== null ? ` • ${company.top_employee_performance}% performance` : ""}</div></td><td className="px-4 py-4"><div className="text-[12px] text-[#b4c8d2]">{company.knowledge_file_count} files</div><div className="mt-1 text-[10px] text-[#71899d]">{formatPlatformBytes(company.storage_bytes)}</div></td><td className="px-4 py-4 text-[11px] text-[#8ca4b5]">{company.last_activity ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(company.last_activity)) : 'No activity yet'}</td><td className="px-4 py-4 text-right"><Status>{company.status === 'active' ? 'Healthy' : company.status}</Status></td><td className="px-6 py-4 text-right"><div className="flex flex-wrap justify-end gap-2">{company.subscription_plan.toLowerCase() === 'basic' ? <button onClick={() => void upgradeToPremium(company.id, company.name)} disabled={upgradingOrganizationId === company.id} className="btn-quiet rounded-lg px-3 py-2 text-[10px] text-[#8dcbd4]">{upgradingOrganizationId === company.id ? 'Updating...' : 'Upgrade to Premium'}</button> : <span className="text-[10px] text-[#6f8998]">Premium active</span>}{!/^finos platform$/i.test(company.name.trim()) && <button onClick={() => void changeOrganizationStatus(company.id, company.name, company.status)} disabled={upgradingOrganizationId === company.id} className="rounded-lg border border-[#29465d] px-3 py-2 text-[10px] text-[#d7e7ee] hover:bg-[#173448]">{company.status.toLowerCase() === 'active' ? 'Suspend' : 'Activate'}</button>}<button onClick={() => void resetUserPassword(company.id, company.name)} disabled={upgradingOrganizationId === company.id} className="rounded-lg border border-[#5a3b72] px-3 py-2 text-[10px] text-[#d6b9eb] hover:bg-[#2e1e42]" title="Change a user password" data-testid={`button-change-password-${company.id}`}><KeyRound size={13} className="inline mr-1"/>Password</button></div></td></tr>)}</tbody></table></div></div>
     <div className="grid gap-4 lg:grid-cols-[.85fr_1.15fr]">
       <div className="panel p-5 md:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="kicker mb-2">System</div><div className="display-font text-[22px] font-semibold text-[#e8f4f7]">Platform footprint</div></div><Activity size={18} className="text-[#f2c66a]"/></div><div className="grid grid-cols-2 gap-3"><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Companies</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_companies}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Employees</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_employees}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Files</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{summary.total_knowledge_files}</div></div><div className="rounded-lg bg-[#10283a] p-3"><div className="kicker">Events</div><div className="mt-2 text-xl font-semibold text-[#e9f5f7]">{recentActivity.length}</div></div></div></div>

@@ -7,6 +7,7 @@ import {
   db,
   organizations,
   subscriptions,
+  paymentDeposits,
   users,
 } from "@workspace/db";
 import {
@@ -25,10 +26,65 @@ import {
 } from "../lib/platform-admin-context";
 import { AUTH_SESSION_COOKIE, getAuthenticatedUser, revokeAllUserSessions } from "../lib/auth-session";
 import { getPlatformAnalytics } from "../lib/platform-analytics-service";
+import { privateObjectStorage } from "../lib/private-object-storage";
 
 const router: IRouter = Router();
 
 const PREMIUM_PRICE_CENTS = 200_000;
+
+router.get("/platform-admin/payment-deposits", async (req, res): Promise<void> => {
+  try {
+    await requirePlatformAdminRequestContext(req);
+    const rows = await db.select().from(paymentDeposits).orderBy(paymentDeposits.submittedAt);
+    const deposits = await Promise.all(rows.map(async (deposit) => ({
+      id: deposit.id,
+      organization_id: deposit.organizationId,
+      plan: deposit.plan,
+      amount_cents: deposit.amountCents,
+      payment_method: deposit.paymentMethod,
+      transfer_reference: deposit.transferReference,
+      status: deposit.status,
+      submitted_at: deposit.submittedAt,
+      receipt_url: await privateObjectStorage.createDownloadUrl(deposit.receiptReference).catch(() => null),
+    })));
+    res.json(deposits);
+  } catch (error) {
+    if (error instanceof PlatformAdminRequestError) { res.status(error.status).json({ error: error.message }); return; }
+    req.log.error({ error }, "Payment deposit list failed");
+    res.status(500).json({ error: "Unable to load payment deposits." });
+  }
+});
+
+router.post("/platform-admin/payment-deposits/:depositId/decision", async (req, res): Promise<void> => {
+  const decision = req.body?.decision === "approved" ? "approved" : req.body?.decision === "rejected" ? "rejected" : null;
+  if (!decision) { res.status(400).json({ error: "A valid deposit decision is required." }); return; }
+  try {
+    const admin = await requirePlatformAdminRequestContext(req);
+    const reviewerEmail = req.header("x-finos-platform-admin-email")!.trim().toLowerCase();
+    const [reviewer] = await db.select({ id: users.id }).from(users).where(eq(users.email, reviewerEmail)).limit(1);
+    if (!reviewer) { res.status(403).json({ error: "Platform admin reviewer user was not found." }); return; }
+    const result = await db.transaction(async (transaction) => {
+      const [deposit] = await transaction.select().from(paymentDeposits).where(eq(paymentDeposits.id, req.params.depositId)).limit(1);
+      if (!deposit) throw new Error("Payment deposit not found.");
+      if (deposit.status !== "pending_review") throw new Error("This payment deposit has already been decided.");
+      const [updated] = await transaction.update(paymentDeposits).set({ status: decision, reviewNotes: typeof req.body?.notes === "string" ? req.body.notes.trim() : null, reviewedByUserId: reviewer.id, reviewedAt: new Date(), updatedAt: new Date() }).where(and(eq(paymentDeposits.id, deposit.id), eq(paymentDeposits.status, "pending_review"))).returning();
+      if (decision === "approved") {
+        await transaction.update(organizations).set({ status: "active", updatedAt: new Date() }).where(eq(organizations.id, deposit.organizationId));
+        await transaction.update(users).set({ status: "active", updatedAt: new Date() }).where(eq(users.organizationId, deposit.organizationId));
+        const periodEnd = new Date();
+        periodEnd.setUTCDate(periodEnd.getUTCDate() + 30);
+        await transaction.update(subscriptions).set({ status: "active", currentPeriodEnd: periodEnd, updatedAt: new Date() }).where(eq(subscriptions.organizationId, deposit.organizationId));
+      }
+      await transaction.insert(activityEvents).values({ organizationId: deposit.organizationId, userId: reviewer.id, eventType: `payment_deposit_${decision}`, metadata: { changed_by_platform_admin: admin.userId, deposit_id: deposit.id } });
+      return updated;
+    });
+    res.json({ id: result?.id, status: result?.status });
+  } catch (error) {
+    if (error instanceof PlatformAdminRequestError) { res.status(error.status).json({ error: error.message }); return; }
+    const message = error instanceof Error ? error.message : "Unable to decide payment deposit.";
+    res.status(message.includes("not found") ? 404 : 400).json({ error: message });
+  }
+});
 
 router.post("/platform-admin/users/password", async (req, res): Promise<void> => {
   const adminEmail = req.header("x-finos-platform-admin-email")?.trim().toLowerCase();
@@ -155,7 +211,7 @@ router.post("/platform-admin/account-applications/:applicationId/decision", asyn
         throw new Error("This account application has already been decided.");
       }
 
-      const status = parsedBody.data.decision === "approved" ? "active" : "rejected";
+      const status = parsedBody.data.decision === "approved" ? "pending_review" : "rejected";
       await transaction
         .update(organizations)
         .set({ status, updatedAt: new Date() })

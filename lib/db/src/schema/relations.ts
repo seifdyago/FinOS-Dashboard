@@ -8,6 +8,7 @@ import { knowledgeDocuments } from "./knowledge-documents.js";
 import { activityEvents } from "./activity-events.js";
 import { usageMetrics } from "./usage-metrics.js";
 import { accountApplications } from "./account-applications.js";
+import { paymentDeposits } from "./payment-deposits.js";
 
 export const organizationsRelations = relations(organizations, ({ many, one }) => ({
   users: many(users),
@@ -17,6 +18,7 @@ export const organizationsRelations = relations(organizations, ({ many, one }) =
   subscription: one(subscriptions),
   activityEvents: many(activityEvents),
   usageMetrics: many(usageMetrics),
+  paymentDeposits: many(paymentDeposits),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -27,6 +29,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   uploadedKnowledgeDocuments: many(knowledgeDocuments),
   activityEvents: many(activityEvents),
   reviewedAccountApplications: many(accountApplications),
+  submittedPaymentDeposits: many(paymentDeposits, { relationName: "deposit_submitter" }),
+  reviewedPaymentDeposits: many(paymentDeposits, { relationName: "deposit_reviewer" }),
 }));
 
 export const departmentsRelations = relations(departments, ({ one, many }) => ({
@@ -104,3 +108,9 @@ export const accountApplicationsRelations = relations(
     }),
   }),
 );
+
+export const paymentDepositsRelations = relations(paymentDeposits, ({ one }) => ({
+  organization: one(organizations, { fields: [paymentDeposits.organizationId], references: [organizations.id] }),
+  submittedBy: one(users, { fields: [paymentDeposits.submittedByUserId], references: [users.id], relationName: "deposit_submitter" }),
+  reviewedBy: one(users, { fields: [paymentDeposits.reviewedByUserId], references: [users.id], relationName: "deposit_reviewer" }),
+}));

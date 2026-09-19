@@ -47,7 +47,11 @@ export const CreateCompanyOnboardingBody = zod.object({
   "password": zod.string().min(createCompanyOnboardingBodyPasswordMin).describe('Account password. The server stores only a secure password hash.'),
   "industry": zod.string().min(1).describe('Company industry'),
   "company_size": zod.string().min(1).describe('Company size'),
-  "subscription": zod.enum(['merchant_basic', 'merchant_premium', 'company_15', 'company_32']).describe('Requested subscription plan')
+  "subscription": zod.enum(['basic', 'premium', 'merchant_basic', 'merchant_premium', 'company_15', 'company_32']).describe('Requested subscription plan'),
+  "payment_method": zod.enum(['wallet_01092122639', 'wallet_01024825088', 'bank_9914624']).describe('Manual payment destination'),
+  "transfer_reference": zod.string().min(1).describe('Payment transfer reference'),
+  "receipt_reference": zod.string().min(1).describe('Private storage path for the payment receipt'),
+  "receipt_type": zod.string().min(1).describe('Payment receipt MIME type')
 })
 
 export const CreateCompanyOnboardingResponse = zod.object({
@@ -494,4 +498,3 @@ export const RecordActivityEventBody = zod.object({
 })
 
 export const RecordActivityEventResponse = zod.void()
-

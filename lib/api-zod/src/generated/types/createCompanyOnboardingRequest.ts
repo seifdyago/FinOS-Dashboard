@@ -57,4 +57,12 @@ export interface CreateCompanyOnboardingRequest {
   company_size: string;
   /** Requested subscription plan */
   subscription: CreateCompanyOnboardingRequestSubscription;
+  /** Manual payment destination */
+  payment_method: 'wallet_01092122639' | 'wallet_01024825088' | 'bank_9914624';
+  /** Payment transfer reference */
+  transfer_reference: string;
+  /** Private storage path for the payment receipt */
+  receipt_reference: string;
+  /** Payment receipt MIME type */
+  receipt_type: string;
 }
