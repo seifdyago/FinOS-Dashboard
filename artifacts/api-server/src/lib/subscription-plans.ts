@@ -25,6 +25,7 @@ export const SUBSCRIPTION_PLANS = {
     priceDollars: 200,
     priceCents: 20_000,
     employeeKeys: ["support", "fraud", "hr-manager", "finance", "compliance"] as const,
+    maxEmployees: 5,
     employeeRoles: [] as const,
     includesAllEmployees: false,
     includesAllDepartments: false,
@@ -36,6 +37,7 @@ export const SUBSCRIPTION_PLANS = {
     priceDollars: 400,
     priceCents: 40_000,
     employeeKeys: LIMITED_EMPLOYEES,
+    maxEmployees: 15,
     employeeRoles: [] as const,
     includesAllEmployees: false,
     includesAllDepartments: true,
@@ -47,6 +49,7 @@ export const SUBSCRIPTION_PLANS = {
     priceDollars: 300,
     priceCents: 30_000,
     employeeKeys: LIMITED_EMPLOYEES,
+    maxEmployees: 15,
     employeeRoles: [] as const,
     includesAllEmployees: false,
     includesAllDepartments: true,
@@ -58,6 +61,7 @@ export const SUBSCRIPTION_PLANS = {
     priceDollars: 600,
     priceCents: 60_000,
     employeeKeys: [] as const,
+    maxEmployees: 32,
     employeeRoles: [] as const,
     includesAllEmployees: true,
     includesAllDepartments: true,
@@ -86,4 +90,9 @@ export function getSubscriptionPlan(plan: string): SubscriptionPlanDefinition | 
   if (plan === "premium") return SUBSCRIPTION_PLANS.merchant_premium;
   if (!(plan in SUBSCRIPTION_PLANS)) return undefined;
   return SUBSCRIPTION_PLANS[plan as SubscriptionPlanId];
+}
+
+export function getEmployeeLimit(plan: string | null | undefined): number {
+  const definition = plan ? getSubscriptionPlan(plan.trim().toLowerCase()) : undefined;
+  return definition?.maxEmployees ?? 0;
 }

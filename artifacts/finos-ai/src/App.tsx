@@ -189,7 +189,7 @@ type EmployeeDraft = {
 };
 type EmployeeContextValue = {
   employees: Employee[];
-  addEmployee: (draft: EmployeeDraft) => void;
+  addEmployee: (draft: EmployeeDraft) => Promise<boolean>;
   updateEmployee: (id: string, draft: EmployeeDraft) => void;
   deleteEmployee: (id: string) => void;
   toggleEmployee: (id: string) => void;
@@ -226,7 +226,9 @@ function EmployeeAvatar({ employee, className = 'h-10 w-10', fallbackClassName =
 }
 
 function EmployeesProvider({ children }: { children: ReactNode }) {
-  const { tenant } = usePlatform();
+  const { tenant, user } = usePlatform();
+  const platformOwner = isPlatformOwner(user);
+  const [employeeLimit, setEmployeeLimit] = useState<number | null>(platformOwner ? null : 0);
   const [roster, setRoster] = useState<Employee[]>(() => {
     try {
       const key = `finos:${tenant.id}:employees`;
@@ -265,8 +267,9 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
     })
       .then(async (response) => {
         if (!response.ok) return;
-        const payload = await response.json() as { employees?: unknown[] };
+        const payload = await response.json() as { employees?: unknown[]; employee_limit?: number | null; platform_owner?: boolean };
         if (!mounted || !Array.isArray(payload.employees)) return;
+        setEmployeeLimit(typeof payload.employee_limit === 'number' ? payload.employee_limit : null);
         const persistedEmployees = mapPersistedEmployeesToEmployees(payload.employees as Parameters<typeof mapPersistedEmployeesToEmployees>[0]);
         setRoster(persistedEmployees.map((employee) => ({
           ...employee,
@@ -291,10 +294,19 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(`finos:${tenant.id}:employees`, JSON.stringify(roster));
   }, [roster, tenant.id]);
 
-  const addEmployee = (draft: EmployeeDraft) => {
+  const addEmployee = async (draft: EmployeeDraft): Promise<boolean> => {
+    if (!platformOwner && employeeLimit !== null && roster.length >= employeeLimit) {
+      toast.error(`Your plan allows up to ${employeeLimit} AI employees. Upgrade to add more.`);
+      return false;
+    }
+    const normalizedRole = draft.role.trim().toLowerCase();
+    if (roster.some((employee) => employee.role.trim().toLowerCase() === normalizedRole || employee.name.trim().toLowerCase() === draft.name.trim().toLowerCase())) {
+      toast.error('An employee with this name or role already exists.');
+      return false;
+    }
     const initials = draft.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
     const accent = '#2a9eb7';
-    setRoster((current) => [...current, {
+    const nextEmployee = {
        ...draft,
       id: `${draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
       initials,
@@ -311,7 +323,20 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
       performance: 0,
       lastActive: 'Just now',
       tasks: [],
-    }]);
+    };
+    try {
+      const response = await fetch('/api/employees', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(nextEmployee) });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        toast.error(typeof payload?.error === 'string' ? payload.error : 'Unable to add this employee.');
+        return false;
+      }
+      setRoster((current) => [...current, nextEmployee]);
+      return true;
+    } catch {
+      toast.error('Unable to connect to the employee service.');
+      return false;
+    }
   };
 
   const updateEmployee = (id: string, draft: EmployeeDraft) => {
@@ -642,7 +667,7 @@ function EmployeeForm({ employee, onClose }: { employee?: Employee; onClose: () 
   const [skillText, setSkillText] = useState(employee?.skills.join(', ') || 'Context review, Decision support');
   const [responsibilityText, setResponsibilityText] = useState(employee?.responsibilities?.join(', ') || '');
   const [saving, setSaving] = useState(false);
-  const save = () => {
+  const save = async () => {
     if (!draft.name.trim() || !draft.role.trim()) {
       toast.error('Add a name and role before saving');
       return;
@@ -653,10 +678,15 @@ function EmployeeForm({ employee, onClose }: { employee?: Employee; onClose: () 
       skills: skillText.split(',').map((skill) => skill.trim()).filter(Boolean),
       responsibilities: responsibilityText.split(',').map((responsibility) => responsibility.trim()).filter(Boolean),
     };
-    setTimeout(() => {
+    setTimeout(async () => {
+      let saved = true;
       if (employee) updateEmployee(employee.id, nextDraft);
       else {
-        addEmployee(nextDraft);
+        saved = await addEmployee(nextDraft);
+        if (!saved) {
+          setSaving(false);
+          return;
+        }
         reportWorkspaceActivity(tenant.id, user.email, {
           event_type: 'employee_created',
           metadata: {
@@ -847,7 +877,7 @@ function AIWorkspace({ employee }: { employee:Employee }) {
   const [notifications,setNotifications]=useState(true);
   const [calendarDay,setCalendarDay]=useState('Today');
   const [reportCount,setReportCount]=useState(3);
-  const [taskHistory,setTaskHistory]=useState([{task:employee.tasks[0],status:'Completed',time:'Today, 09:14'},{task:employee.tasks[1],status:'Completed',time:'Today, 08:42'},{task:employee.tasks[2],status:'In progress',time:'Today, 07:58'}]);
+  const [taskHistory,setTaskHistory]=useState<{ task: string; status: string; time: string }[]>([]);
   const [chatAttachments,setChatAttachments]=useState<File[]>([]);
   const [sentAttachments,setSentAttachments]=useState<ChatAttachment[][]>([]);
   const { name, role, department, initials, color, accent, status, active, metric, metricLabel, description, tasks, skills, performance, lastActive } = liveEmployee;
@@ -914,7 +944,7 @@ function AIWorkspace({ employee }: { employee:Employee }) {
       activeTab==='Playbooks' ? <div className="panel p-6"><div className="kicker mb-2">Playbooks</div><h2 className="display-font text-xl font-semibold text-[#f1f5f9]">Reusable operating patterns.</h2><p className="mt-2 max-w-lg text-sm leading-6 text-[#8198aa]">Build and save playbooks for repeatable work. Every run remains visible in the activity timeline.</p><div className="mt-6 grid gap-3 md:grid-cols-2">{['Morning context scan','Exception triage','Weekly operating summary','Escalation review'].map((item,i)=><button key={item} onClick={()=>toast.success(`${item} queued for ${name}`)} className="rounded-lg border border-[#203c50] bg-[#0c1020] p-4 text-left text-sm text-[#b8cad5] hover:border-[#35667b]" data-testid={`button-playbook-${i}`}><div className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-md bg-[#173746] text-[10px] text-[#64d8e5]">{i+1}</span>{item}</div><div className="mt-2 text-[11px] text-[#718b9f]">Last run {i+2}h ago <span className="float-right text-[#34d399]">Healthy</span></div></button>)}</div></div> :
       activeTab==='Activity' ? <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]"><ActivityTimeline employee={liveEmployee}/><PerformancePanel employee={liveEmployee}/></div> :
       activeTab==='Tasks' ? <TaskManager employee={liveEmployee} tasks={tasks} taskFilter={taskFilter} setTaskFilter={setTaskFilter} completed={completed} setCompleted={setCompleted} history={taskHistory} setHistory={setTaskHistory}/> :
-      <><div className="grid gap-4 md:grid-cols-3"><div className="panel p-5 md:col-span-2"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Current focus</div><div className="text-sm font-semibold text-[#dfedf1]">{tasks[0]}</div></div><span className="status-pill border-[#167d5a] bg-[#0d3b2c] text-[#6fe0bd]">In progress</span></div><div className="mb-5 h-2 overflow-hidden rounded-full bg-[#142c3e]"><div className="h-full rounded-full" style={{width:'72%',background:color}}/></div><div className="flex justify-between text-[10px] text-[#718b9f]"><span>Context gathered</span><span style={{color}}>72% confidence</span></div><div className="mt-6 rounded-lg border border-[#213c4e] bg-[#0a1827] p-4 text-[12px] leading-5 text-[#95aebe]"><span className="font-semibold" style={{color}}>Observation:</span> {name} sees a stable operating picture with one exception that may benefit from a human decision.</div></div><div className="panel p-5"><div className="kicker mb-1">Primary metric</div><div className="display-font mt-2 text-[30px] font-semibold" style={{color}}>{metric}</div><div className="mt-1 text-[11px] text-[#7891a4]">{metricLabel}</div><div className="mt-6 h-16"><Sparkline values={[35,42,38,54,48,66,60,72,68,85,78,91]} color={color} fill/></div><div className="mt-3 flex justify-between text-[10px] text-[#718b9f]"><span>7 days ago</span><span>Today</span></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><TaskManager employee={liveEmployee} tasks={tasks} taskFilter="Open" setTaskFilter={setTaskFilter} completed={completed} setCompleted={setCompleted} history={taskHistory} setHistory={setTaskHistory}/><div className="panel flex min-h-[260px] flex-col p-5"><div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><MessageSquare size={15} style={{color}}/><div className="kicker">Talk to {name}</div></div><button onClick={()=>{setNotifications(!notifications);toast.info(`Notifications ${notifications?'muted':'enabled'}`)}} className={`rounded-md p-1.5 ${notifications?'text-[#8b5cf6]':'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-employee-notifications"><Bell size={14}/></button></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I'm tracking the operation. What would you like me to look into?</p>{sent.slice(-2).map((m,i)=><p key={i} className="ml-5 rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{m}</p>)}{sent.length>0&&<p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I'll add that to my current review and report back with evidence.</p>}</div><div className="mt-4 flex gap-2"><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} className="input-dark h-9 min-w-0 flex-1 rounded-lg px-3 text-[11px]" placeholder="Give an instruction..." data-testid={`input-message-${employee.id}`}/><button onClick={send} className="btn-primary grid h-9 w-9 place-items-center rounded-lg" data-testid={`button-send-${employee.id}`}><Send size={14}/></button></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[.9fr_1.1fr]"><PerformancePanel employee={liveEmployee}/><ActivityTimeline employee={liveEmployee}/></div></>}
+      <><div className="grid gap-4 md:grid-cols-3"><div className="panel p-5 md:col-span-2"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Current focus</div><div className="text-sm font-semibold text-[#dfedf1]">{tasks[0] || 'No integration task is currently assigned.'}</div></div><span className="status-pill border-[#52627b] bg-[#1b293b] text-[#9db2ca]">{tasks.length ? 'In progress' : 'Waiting for integration'}</span></div><div className="mb-5 h-2 overflow-hidden rounded-full bg-[#142c3e]"><div className="h-full rounded-full" style={{width:'72%',background:color}}/></div><div className="flex justify-between text-[10px] text-[#718b9f]"><span>{tasks.length ? 'Context gathered' : 'No live task data'}</span><span style={{color}}>{tasks.length ? '72% confidence' : 'Awaiting integration'}</span></div><div className="mt-6 rounded-lg border border-[#213c4e] bg-[#0a1827] p-4 text-[12px] leading-5 text-[#95aebe]"><span className="font-semibold" style={{color}}>Operating state:</span> {tasks.length ? `${name} is working from integration-provided context.` : `${name} is ready and waiting for connected integration events.`}</div></div><div className="panel p-5"><div className="kicker mb-1">Primary metric</div><div className="display-font mt-2 text-[30px] font-semibold" style={{color}}>{metric}</div><div className="mt-1 text-[11px] text-[#7891a4]">{metricLabel}</div><div className="mt-6 h-16"><Sparkline values={[35,42,38,54,48,66,60,72,68,85,78,91]} color={color} fill/></div><div className="mt-3 flex justify-between text-[10px] text-[#718b9f]"><span>7 days ago</span><span>Today</span></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><TaskManager employee={liveEmployee} tasks={tasks} taskFilter="Open" setTaskFilter={setTaskFilter} completed={completed} setCompleted={setCompleted} history={taskHistory} setHistory={setTaskHistory}/><div className="panel flex min-h-[260px] flex-col p-5"><div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><MessageSquare size={15} style={{color}}/><div className="kicker">Talk to {name}</div></div><button onClick={()=>{setNotifications(!notifications);toast.info(`Notifications ${notifications?'muted':'enabled'}`)}} className={`rounded-md p-1.5 ${notifications?'text-[#8b5cf6]':'text-[#657e93]'}`} aria-label="Toggle notifications" data-testid="button-toggle-employee-notifications"><Bell size={14}/></button></div><div className="flex-1 space-y-3 text-[12px] leading-5 text-[#8da5b4]"><p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I'm tracking the operation. What would you like me to look into?</p>{sent.slice(-2).map((m,i)=><p key={i} className="ml-5 rounded-lg rounded-tr-none bg-[#183947] p-3 text-[#c3dce2]">{m}</p>)}{sent.length>0&&<p className="rounded-lg rounded-tl-none bg-[#122738] p-3">I'll add that to my current review and report back with evidence.</p>}</div><div className="mt-4 flex gap-2"><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} className="input-dark h-9 min-w-0 flex-1 rounded-lg px-3 text-[11px]" placeholder="Give an instruction..." data-testid={`input-message-${employee.id}`}/><button onClick={send} className="btn-primary grid h-9 w-9 place-items-center rounded-lg" data-testid={`button-send-${employee.id}`}><Send size={14}/></button></div></div></div><div className="mt-4 grid gap-4 lg:grid-cols-[.9fr_1.1fr]"><PerformancePanel employee={liveEmployee}/><ActivityTimeline employee={liveEmployee}/></div></>}
     {editing && <EmployeeForm employee={liveEmployee} onClose={() => setEditing(false)}/>}</div>;
 }
 
@@ -933,14 +963,14 @@ function HRMemoryPanel({ employee }: { employee: Employee }) {
 }
 
 function EmployeeCalendarPanel({ employee, day, setDay }: { employee: Employee; day: string; setDay: (value: string) => void }) {
-  const events = [
+  const events = employee.tasks.length ? [
     ['Today', employee.tasks[0], '09:30', employee.color],
     ['Tomorrow', employee.tasks[1], '11:00', '#34d399'],
     ['Friday', employee.tasks[2], '14:00', '#f6c76d'],
-  ];
+  ] : [];
   return <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
     <div className="panel p-5"><div className="kicker mb-1">Calendar</div><div className="text-sm font-semibold text-[#deedf1]">Upcoming schedule</div><div className="mt-5 grid grid-cols-3 gap-2">{['Today', 'Tomorrow', 'Friday'].map((item) => <button key={item} onClick={() => setDay(item)} className={`rounded-lg border px-2 py-3 text-[11px] ${day === item ? 'border-[#438fa1] bg-[#153743] text-[#a78bfa]' : 'border-[#30235d] text-[#7892a5]'}`}>{item}</button>)}</div><div className="mt-5 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="text-[11px] text-[#7892a5]">Next focus</div><div className="mt-2 text-sm font-medium text-[#e2e8f0]">{events.find((event) => event[0] === day)?.[1]}</div><div className="mt-2 text-[11px] text-[#8b5cf6]">{events.find((event) => event[0] === day)?.[2]} • {day}</div></div></div>
-    <div className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Scheduled work</div><div className="text-sm font-semibold text-[#deedf1]">{employee.role} calendar</div></div><CalendarDays size={16} className="text-[#668ba0]"/></div><div className="space-y-3">{events.map(([eventDay, label, time, eventColor]) => <button key={eventDay} onClick={() => { setDay(eventDay); toast.info(`${label} opened for review`); }} className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left ${day === eventDay ? 'border-[#315b6c] bg-[#102b38]' : 'border-transparent bg-[#0c1020]'}`}><span className="h-8 w-1 rounded-full" style={{ background: eventColor }} /><span className="flex-1"><span className="block text-[12px] text-[#d5e5eb]">{label}</span><span className="mt-1 block text-[10px] text-[#718b9f]">{eventDay} • {time}</span></span><ChevronRight size={14} className="text-[#55748b]"/></button>)}</div></div>
+    <div className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Scheduled work</div><div className="text-sm font-semibold text-[#deedf1]">{employee.role} calendar</div></div><CalendarDays size={16} className="text-[#668ba0]"/></div><div className="space-y-3">{events.length === 0 && <div className="rounded-lg border border-dashed border-[#274357] px-4 py-6 text-center text-[11px] leading-5 text-[#718b9f]">No integration-generated schedule yet.</div>}{events.map(([eventDay, label, time, eventColor]) => <button key={eventDay} onClick={() => { setDay(eventDay); toast.info(`${label} opened for review`); }} className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left ${day === eventDay ? 'border-[#315b6c] bg-[#102b38]' : 'border-transparent bg-[#0c1020]'}`}><span className="h-8 w-1 rounded-full" style={{ background: eventColor }} /><span className="flex-1"><span className="block text-[12px] text-[#d5e5eb]">{label}</span><span className="mt-1 block text-[10px] text-[#718b9f]">{eventDay} • {time}</span></span><ChevronRight size={14} className="text-[#55748b]"/></button>)}</div></div>
   </div>;
 }
 
@@ -1003,11 +1033,8 @@ function EmployeeSettingsPanel({ employee, notifications, setNotifications }: { 
 }
 
 function TaskManager({ employee, tasks, taskFilter, setTaskFilter, completed, setCompleted, history, setHistory }: { employee: Employee; tasks: string[]; taskFilter: string; setTaskFilter: (value: string) => void; completed: string[]; setCompleted: (value: string[]) => void; history: { task: string; status: string; time: string }[]; setHistory: (value: { task: string; status: string; time: string }[]) => void }) {
-  const [assigning, setAssigning] = useState(false);
-  const [newTask, setNewTask] = useState('');
   const visible = taskFilter === 'Completed' ? history.filter((item) => item.status === 'Completed').map((item) => item.task) : tasks.filter((task) => !completed.includes(task));
-  const assign = () => { if (!newTask.trim()) return; setHistory([{ task: newTask, status: 'Assigned', time: 'Just now' }, ...history]); setNewTask(''); setAssigning(false); toast.success(`Task assigned to ${employee.name}`); };
-  return <div className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><div className="kicker mb-1">Task management</div><div className="text-sm font-semibold text-[#deedf1]">Queue and history</div></div><button onClick={() => setAssigning(true)} className="btn-quiet flex items-center gap-1.5 rounded-md px-2.5 py-2 text-[10px]" data-testid="button-assign-task"><Plus size={13}/> Assign task</button></div><div className="mb-4 flex gap-1 rounded-lg bg-[#0b0e1b] p-1"><button onClick={() => setTaskFilter('Open')} className={`flex-1 rounded-md py-1.5 text-[10px] ${taskFilter === 'Open' ? 'bg-[#1d4050] text-[#a78bfa]' : 'text-[#6f899c]'}`}>Open ({tasks.length - completed.length})</button><button onClick={() => setTaskFilter('Completed')} className={`flex-1 rounded-md py-1.5 text-[10px] ${taskFilter === 'Completed' ? 'bg-[#1d4050] text-[#a78bfa]' : 'text-[#6f899c]'}`}>History ({history.filter((item) => item.status === 'Completed').length})</button></div><div className="space-y-2">{visible.map((task, i) => <button key={task} onClick={() => { if (!completed.includes(task)) { setCompleted([...completed, task]); setHistory([{task, status:'Completed', time:'Just now'}, ...history]); toast.success(`${employee.name} completed a task`); } }} className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-[#0c1020] px-3 py-3 text-left text-[12px] text-[#afc2ce] hover:border-[#2b5268] hover:bg-[#10283a]" data-testid={`button-task-${employee.id}-${i}`}><span className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] ${taskFilter === 'Completed' ? 'border-[#167d5a] bg-[#0d3b2c] text-[#6fe0bd]' : 'border-[#2b5268]'}`}><CheckCircle2 size={13}/></span><span className="flex-1">{task}</span><span className="text-[10px] text-[#6f899c]">{taskFilter === 'Completed' ? history.find((item) => item.task === task)?.time : 'Open'}</span></button>)}{visible.length === 0 && <div className="rounded-lg border border-dashed border-[#274357] px-4 py-6 text-center text-[11px] leading-5 text-[#718b9f]">No tasks assigned yet. Use “Assign task” to add real work for this employee.</div>}</div>{assigning && <div className="mt-4 flex gap-2"><input autoFocus value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && assign()} className="input-dark h-9 min-w-0 flex-1 rounded-lg px-3 text-[11px]" placeholder="Describe a task..." data-testid="input-new-task"/><button onClick={assign} className="btn-primary rounded-lg px-3 text-[11px]" data-testid="button-save-task">Assign</button></div>}</div>;
+  return <div className="panel p-5"><div className="mb-4"><div className="kicker mb-1">Integration-driven task queue</div><div className="text-sm font-semibold text-[#deedf1]">Automatic work and history</div><p className="mt-1 text-[11px] leading-5 text-[#718b9f]">Tasks are created only by connected integrations, workspace events, or the employee AI runtime. Manual task creation is disabled.</p></div><div className="mb-4 flex gap-1 rounded-lg bg-[#0b0e1b] p-1"><button onClick={() => setTaskFilter('Open')} className={`flex-1 rounded-md py-1.5 text-[10px] ${taskFilter === 'Open' ? 'bg-[#1d4050] text-[#a78bfa]' : 'text-[#6f899c]'}`}>Open ({tasks.length - completed.length})</button><button onClick={() => setTaskFilter('Completed')} className={`flex-1 rounded-md py-1.5 text-[10px] ${taskFilter === 'Completed' ? 'bg-[#1d4050] text-[#a78bfa]' : 'text-[#6f899c]'}`}>History ({history.filter((item) => item.status === 'Completed').length})</button></div><div className="space-y-2">{visible.map((task, i) => <button key={task} onClick={() => { if (!completed.includes(task)) { setCompleted([...completed, task]); setHistory([{task, status:'Completed', time:'Just now'}, ...history]); toast.success(`${employee.name} completed a task`); } }} className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-[#0c1020] px-3 py-3 text-left text-[12px] text-[#afc2ce] hover:border-[#2b5268] hover:bg-[#10283a]" data-testid={`button-task-${employee.id}-${i}`}><span className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] ${taskFilter === 'Completed' ? 'border-[#167d5a] bg-[#0d3b2c] text-[#6fe0bd]' : 'border-[#2b5268]'}`}><CheckCircle2 size={13}/></span><span className="flex-1">{task}</span><span className="text-[10px] text-[#6f899c]">{taskFilter === 'Completed' ? history.find((item) => item.task === task)?.time : 'Open'}</span></button>)}{visible.length === 0 && <div className="rounded-lg border border-dashed border-[#274357] px-4 py-6 text-center text-[11px] leading-5 text-[#718b9f]">No integration-generated tasks yet.</div>}</div></div>;
 }
 
 function PerformancePanel({ employee }: { employee: Employee }) {
@@ -1015,8 +1042,7 @@ function PerformancePanel({ employee }: { employee: Employee }) {
 }
 
 function ActivityTimeline({ employee }: { employee: Employee }) {
-  const items = [{label:'Completed task review',time:'12 min ago',detail:'Delivered a concise operating recommendation.',color:'#34d399'},{label:'Updated operating context',time:'46 min ago',detail:'Added 14 new payment signals to the workspace.',color:employee.color},{label:'Escalated to Jordan Shaw',time:'2 hrs ago',detail:'Requested a decision on a high-confidence exception.',color:'#f6c76d'},{label:'Started morning scan',time:employee.lastActive,detail:'Reviewed workspace activity and connected data.',color:'#ce9eff'}];
-  return <div className="panel p-5"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Activity timeline</div><div className="text-sm font-semibold text-[#deedf1]">A visible trail of work</div></div><Clock4 size={16} className="text-[#668ba0]"/></div><div className="space-y-5">{items.map((item) => <div key={item.label} className="relative flex gap-3"><div className="relative mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full" style={{background:`${item.color}20`}}><span className="h-1.5 w-1.5 rounded-full" style={{background:item.color}}/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[12px] font-medium text-[#d5e5eb]">{item.label}</span><span className="text-[10px] text-[#6e879b]">{item.time}</span></div><p className="mt-1 text-[11px] leading-5 text-[#7d96a7]">{item.detail}</p></div></div>)}</div></div>;
+  return <div className="panel p-5"><div className="mb-5 flex items-center justify-between"><div><div className="kicker mb-1">Activity timeline</div><div className="text-sm font-semibold text-[#deedf1]">Live work history</div></div><Clock4 size={16} className="text-[#668ba0]"/></div><div className="rounded-lg border border-dashed border-[#274357] px-4 py-8 text-center text-[11px] leading-5 text-[#718b9f]">No live activity has been received for {employee.name} yet. Connected integrations will appear here when work starts.</div></div>;
 }
 
 function DataPage({ kind }: { kind:'transactions'|'customers'|'merchants' }) {
@@ -1279,7 +1305,7 @@ function AssistantPage() {
       usage_value: 1,
     });
   };
-  return <div className="mx-auto max-w-[1000px]"><SectionHeader eyebrow="Command center / AI" title="Ask the chief of staff." description={`${chief?.name || 'FinOS AI'} is the chief employee: it coordinates the workforce, uses the real employee prompt, and answers with workspace context.`}/><div className="panel overflow-hidden"><div className="flex min-h-[420px] flex-col space-y-4 p-5 md:p-7">{messages.map((item, index) => <div key={index} className={`max-w-[80%] rounded-xl p-4 text-[13px] leading-6 ${item.role === 'user' ? 'ml-auto bg-[#183947] text-[#c8e1e6]' : 'bg-[#10283a] text-[#a9c0cb]'}`}><div className="kicker mb-1">{item.role === 'user' ? 'You' : chief?.name || 'Chief assistant'}</div>{item.text}</div>)}<div className="mt-auto flex flex-wrap gap-2 pt-4">{['What needs review?', 'Give me the executive priorities', 'Which employee needs support?'].map((prompt) => <button key={prompt} onClick={() => setMessage(prompt)} className="btn-quiet rounded-lg px-3 py-2 text-[11px]">{prompt}</button>)}</div></div><div className="flex gap-2 border-t border-[#1b3448] p-4"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} disabled={loading || !chief} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-sm" placeholder={loading ? 'Chief assistant is thinking...' : 'Ask the chief about your operation...'} data-testid="input-assistant-message"/><button onClick={() => void send()} disabled={loading || !chief} className="btn-primary grid h-10 w-10 place-items-center rounded-lg disabled:opacity-50" data-testid="button-send-assistant"><Send size={15}/></button></div></div></div>;
+  return <div className="mx-auto max-w-[1000px]"><SectionHeader eyebrow="Command center / AI" title="Ask the chief of staff." description={`${chief?.name || 'FinOS AI'} is the chief employee: it coordinates the workforce, uses the real employee prompt, and answers with workspace context.`}/>{chief && <div className="mb-4 flex items-center gap-4 rounded-xl border border-[#274357] bg-[#10283a] p-4"><EmployeeAvatar employee={chief} className="h-14 w-14" fallbackClassName="h-14 w-14 bg-[#163147] text-sm"/><div><div className="kicker mb-1">AI employee / executive</div><div className="text-lg font-semibold text-[#e2f0f2]">{chief.name}</div><div className="text-[11px] text-[#8da5b4]">{chief.role} • Coordinates the FinOS AI workforce</div></div></div>}<div className="panel overflow-hidden"><div className="flex min-h-[420px] flex-col space-y-4 p-5 md:p-7">{messages.map((item, index) => <div key={index} className={`max-w-[80%] rounded-xl p-4 text-[13px] leading-6 ${item.role === 'user' ? 'ml-auto bg-[#183947] text-[#c8e1e6]' : 'bg-[#10283a] text-[#a9c0cb]'}`}><div className="kicker mb-1">{item.role === 'user' ? 'You' : chief?.name || 'Chief assistant'}</div>{item.text}</div>)}<div className="mt-auto flex flex-wrap gap-2 pt-4">{['What needs review?', 'Give me the executive priorities', 'Which employee needs support?'].map((prompt) => <button key={prompt} onClick={() => setMessage(prompt)} className="btn-quiet rounded-lg px-3 py-2 text-[11px]">{prompt}</button>)}</div></div><div className="flex gap-2 border-t border-[#1b3448] p-4"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} disabled={loading || !chief} className="input-dark h-10 min-w-0 flex-1 rounded-lg px-3 text-sm" placeholder={loading ? 'Chief assistant is thinking...' : 'Ask the chief about your operation...'} data-testid="input-assistant-message"/><button onClick={() => void send()} disabled={loading || !chief} className="btn-primary grid h-10 w-10 place-items-center rounded-lg disabled:opacity-50" data-testid="button-send-assistant"><Send size={15}/></button></div></div></div>;
 }
 
 function Login({ onLogin }: { onLogin: () => void }) {
@@ -2002,7 +2028,23 @@ function PlatformAdminPage() {
     total_employees: 0,
   };
   const summary = analytics?.summary || fallbackSummary;
-  const companies = analytics?.companies || [];
+  const companies = (analytics?.companies || []) as unknown as Array<{
+    id: string;
+    name: string;
+    registration_date: string;
+    subscription_plan: string;
+    subscription_status: string;
+    monthly_price_cents: number;
+    user_count: number;
+    ai_employee_count: number;
+    top_employee_name: string | null;
+    top_employee_role: string | null;
+    top_employee_performance: number | null;
+    knowledge_file_count: number;
+    storage_bytes: number;
+    last_activity: string | null;
+    status: string;
+  }>;
   const recentActivity = analytics?.recent_activity || [];
   const analyticsUnavailable = Boolean(analyticsQuery.isError || !analytics);
   const activeCompanies = companies.filter((company) => company.status.toLowerCase() === 'active').length;

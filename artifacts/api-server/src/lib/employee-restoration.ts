@@ -1,5 +1,6 @@
 import type { InsertEmployee } from "@workspace/db";
 
+// @ts-ignore The frontend catalog is the canonical shared roster until it is moved to a shared package.
 import { employees as sourceEmployees } from "../../../finos-ai/src/data/employees";
 import { employeeRepository } from "./employee-repository";
 
@@ -9,9 +10,10 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String) : [];
 }
 
-function toInsertEmployee(employee: SourceEmployee): InsertEmployee {
+function toInsertEmployee(employee: SourceEmployee, organizationId: string): InsertEmployee {
   const source = employee as SourceEmployee & Record<string, unknown>;
   return {
+    organizationId,
     employeeKey: employee.id,
     name: employee.name,
     role: employee.role,
@@ -48,10 +50,8 @@ function toInsertEmployee(employee: SourceEmployee): InsertEmployee {
   };
 }
 
-const restorationInputs = sourceEmployees.map(toInsertEmployee);
-
 export async function restoreEmployeesForOrganization(organizationId: string) {
-  return employeeRepository.upsertMany(organizationId, restorationInputs);
+  return employeeRepository.upsertMany(organizationId, sourceEmployees.map((employee) => toInsertEmployee(employee, organizationId)));
 }
 
-export const restoredEmployeeCount = restorationInputs.length;
+export const restoredEmployeeCount = sourceEmployees.length;

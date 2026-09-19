@@ -225,11 +225,11 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     timezone: 'Pacific Time (US & Canada)',
   }, legacyMigration));
   const [preferences, setPreferences] = useState(() => readTenantStored(tenant.id, 'preferences', { ...initialPreferences, workspaceName: tenant.name, operatingContext: `${tenant.name} is a global payments platform serving thoughtful commerce brands.` }, legacyMigration));
-  const [notifications, setNotifications] = useState(() => readTenantStored(tenant.id, 'notifications', [], legacyMigration));
-  const [transactions, setTransactions] = useState(() => readTenantStored(tenant.id, 'transactions', [], legacyMigration));
-  const [customers, setCustomers] = useState(() => normalizeCustomers(readTenantStored(tenant.id, 'customers', [], legacyMigration)));
-  const [merchants, setMerchants] = useState(() => readTenantStored(tenant.id, 'merchants', [], legacyMigration));
-  const [reports, setReports] = useState(() => readTenantStored(tenant.id, 'reports', [], legacyMigration));
+  const [notifications, setNotifications] = useState<PlatformNotification[]>(() => readTenantStored(tenant.id, 'notifications', [] as PlatformNotification[], legacyMigration));
+  const [transactions, setTransactions] = useState<TransactionRecord[]>(() => readTenantStored(tenant.id, 'transactions', [] as TransactionRecord[], legacyMigration));
+  const [customers, setCustomers] = useState<CustomerRecord[]>(() => normalizeCustomers(readTenantStored(tenant.id, 'customers', [] as CustomerRecord[], legacyMigration)));
+  const [merchants, setMerchants] = useState<MerchantRecord[]>(() => readTenantStored(tenant.id, 'merchants', [] as MerchantRecord[], legacyMigration));
+  const [reports, setReports] = useState<ReportRecord[]>(() => readTenantStored(tenant.id, 'reports', [] as ReportRecord[], legacyMigration));
 
   useEffect(() => {
     localStorage.setItem(tenantKey(tenant.id, 'theme'), JSON.stringify(theme));
