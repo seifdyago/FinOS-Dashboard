@@ -1704,7 +1704,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <button onClick={() => { setOnboarding(false); setStep(1); setError(''); }} className="btn-quiet rounded-lg px-3 py-2 text-[11px]" data-testid="button-back-to-login">Back</button>
       </div>
       <div className="mb-7 grid grid-cols-3 gap-2">
-        {['Identity & password', accountType === 'company' ? 'Company & subscription' : 'ID verification', 'Review'].map((label, index) => <div key={label} className={`border-t-2 pt-2 text-[10px] ${step >= index + 1 ? 'border-[#8b5cf6] text-[#c8e4e9]' : 'border-[#214057] text-[#607b90]'}`}>{index + 1}. {label}</div>)}
+        {['Identity & password', 'Company & subscription', 'Review'].map((label, index) => <div key={label} className={`border-t-2 pt-2 text-[10px] ${step >= index + 1 ? 'border-[#8b5cf6] text-[#c8e4e9]' : 'border-[#214057] text-[#607b90]'}`}>{index + 1}. {label}</div>)}
       </div>
       {step === 1 && <div className="space-y-4">
         <label className="block"><span className="kicker mb-2 block">Full name</span><input autoFocus value={fullName} onChange={(event) => setFullName(event.target.value)} className={fieldClass} placeholder="Your full name" data-testid="input-signup-name"/></label>
@@ -2143,9 +2143,10 @@ function PlatformAdminPage() {
 
   const decidePaymentDeposit = async (depositId: string, decision: 'approved' | 'rejected') => {
     const label = decision === 'approved' ? 'قبول الإيداع وتفعيل الحساب' : 'رفض الإيداع';
+    const notes = window.prompt('اكتب تعليق المراجعة (اختياري):')?.trim() || '';
     if (!window.confirm(`هل تريد ${label}؟`)) return;
     try {
-      const response = await fetch(`/api/platform-admin/payment-deposits/${encodeURIComponent(depositId)}/decision`, { method: 'POST', credentials: 'include', headers: { 'x-finos-platform-admin-email': adminEmail, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ decision }) });
+      const response = await fetch(`/api/platform-admin/payment-deposits/${encodeURIComponent(depositId)}/decision`, { method: 'POST', credentials: 'include', headers: { 'x-finos-platform-admin-email': adminEmail, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ decision, notes: notes || undefined }) });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to review payment deposit.');
       toast.success(decision === 'approved' ? 'تم قبول الدفع وتفعيل الحساب' : 'تم رفض الإيداع');
