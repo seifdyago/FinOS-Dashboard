@@ -15,7 +15,7 @@ import {
   FileDown, MessageCircle, CheckCheck, CircleAlert, FileUp, KeyRound, Phone, Mail, Loader2
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
-import { PlatformProvider, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
+import { PlatformProvider, loadWorkspaceRecords, saveWorkspaceRecord, tenantForIdentity, usePlatform, type CustomerRecord, type MerchantRecord, type TransactionRecord } from '@/lib/platform';
 import { employees } from '@/data/employees';
 import type { Employee } from '@/types/employee';
 import { mapPersistedEmployeesToEmployees } from '@/lib/employee-mapper';
@@ -32,7 +32,6 @@ import {
 const queryClient = new QueryClient();
 
 const ACTIVE_ACCOUNT_KEY = 'finos-active-account-v2';
-const MERCHANT_CREDENTIALS_KEY = 'finos-merchant-credential-verifiers-v1';
 
 type BackendSessionUser = {
   id: string;
@@ -95,23 +94,6 @@ type ChatAttachment = {
   size: number;
   data: string;
 };
-
-type PersistedEmployeeChat = {
-  sent: string[];
-  responses: string[];
-};
-
-function readPersistedEmployeeChat(key: string): PersistedEmployeeChat {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || 'null') as Partial<PersistedEmployeeChat> | null;
-    return {
-      sent: Array.isArray(value?.sent) ? value.sent.filter((item): item is string => typeof item === 'string') : [],
-      responses: Array.isArray(value?.responses) ? value.responses.filter((item): item is string => typeof item === 'string') : [],
-    };
-  } catch {
-    return { sent: [], responses: [] };
-  }
-}
 
 const CHAT_MAX_FILE_SIZE = 25 * 1024 * 1024;
 const CHAT_MAX_TOTAL_SIZE = 50 * 1024 * 1024;
@@ -246,34 +228,7 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
   const { tenant, user } = usePlatform();
   const platformOwner = isPlatformOwner(user);
   const [employeeLimit, setEmployeeLimit] = useState<number | null>(platformOwner ? null : 0);
-  const [roster, setRoster] = useState<Employee[]>(() => {
-    try {
-      const key = `finos:${tenant.id}:employees`;
-      const stored = localStorage.getItem(key) || (tenant.id === 'orbit-digital' ? localStorage.getItem('finos-employees') : null);
-      const parsed = stored ? JSON.parse(stored) as Employee[] : [];
-      const uniqueParsed = parsed.reduce<Employee[]>((unique, employee) => {
-        if (!unique.some((existing) => existing.id === employee.id || employeeRoleKey(existing.role) === employeeRoleKey(employee.role))) {
-          unique.push(employee);
-        }
-        return unique;
-      }, []);
-      const merged = uniqueParsed;
-      return merged.map((employee) => ({
-        ...employee,
-        tasks: [],
-        responsibilities: employee.responsibilities || [],
-        permissions: builderPermissions,
-        knowledge: employee.knowledge || [],
-        knowledgeSource: employee.knowledgeSource || '',
-        systemPrompt: employee.systemPrompt || '',
-        personality: employee.personality || 'Thoughtful and clear',
-        avatar: employee.avatar || '',
-        manager: employee.manager || 'Workspace admin',
-      }));
-    } catch {
-      return [];
-    }
-  });
+  const [roster, setRoster] = useState<Employee[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -306,10 +261,6 @@ function EmployeesProvider({ children }: { children: ReactNode }) {
       });
     return () => { mounted = false; };
   }, [tenant.id]);
-
-  useEffect(() => {
-    localStorage.setItem(`finos:${tenant.id}:employees`, JSON.stringify(roster));
-  }, [roster, tenant.id]);
 
   const addEmployee = async (draft: EmployeeDraft): Promise<boolean> => {
     if (!platformOwner && employeeLimit !== null && roster.length >= employeeLimit) {
@@ -891,12 +842,9 @@ function EmployeeDetailsPage({ employee }: { employee: Employee }) {
 
 function AIWorkspace({ employee }: { employee:Employee }) {
   const { employees: roster, toggleEmployee } = useEmployees();
-  const { tenant } = usePlatform();
   const liveEmployee = roster.find((item) => item.id === employee.id) || employee;
   const isMobileDevice = useMemo(() => typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent), []);
-  const chatStorageKey = `finos:${tenant.id}:employee-chat:${liveEmployee.id}`;
-  const persistedChat = useMemo(() => readPersistedEmployeeChat(chatStorageKey), [chatStorageKey]);
-  const [message,setMessage]=useState(''); const [sent,setSent]=useState<string[]>(persistedChat.sent); const [responses,setResponses]=useState<string[]>(persistedChat.responses); const [chatLoading,setChatLoading]=useState(false); const [activeTab,setActiveTab]=useState('Overview'); const [running,setRunning]=useState(false); const [editing,setEditing]=useState(false); const [taskFilter,setTaskFilter]=useState('Open'); const [completed,setCompleted]=useState<string[]>([]);
+  const [message,setMessage]=useState(''); const [sent,setSent]=useState<string[]>([]); const [responses,setResponses]=useState<string[]>([]); const [chatLoading,setChatLoading]=useState(false); const [activeTab,setActiveTab]=useState('Overview'); const [running,setRunning]=useState(false); const [editing,setEditing]=useState(false); const [taskFilter,setTaskFilter]=useState('Open'); const [completed,setCompleted]=useState<string[]>([]);
   const [notifications,setNotifications]=useState(true);
   const [calendarDay,setCalendarDay]=useState('Today');
   const [reportCount,setReportCount]=useState(3);
@@ -904,8 +852,17 @@ function AIWorkspace({ employee }: { employee:Employee }) {
   const [chatAttachments,setChatAttachments]=useState<File[]>([]);
   const [sentAttachments,setSentAttachments]=useState<ChatAttachment[][]>([]);
   useEffect(() => {
-    try { localStorage.setItem(chatStorageKey, JSON.stringify({ sent, responses } satisfies PersistedEmployeeChat)); } catch { /* keep the live conversation available if storage is full */ }
-  }, [chatStorageKey, sent, responses]);
+    let mounted = true;
+    void loadWorkspaceRecords('employee_chat').then((records) => {
+      const record = records.find((item) => item.record_id === liveEmployee.id);
+      if (!mounted || !record) return;
+      const payload = record.payload as { sent?: unknown; responses?: unknown };
+      setSent(Array.isArray(payload.sent) ? payload.sent.map(String) : []);
+      setResponses(Array.isArray(payload.responses) ? payload.responses.map(String) : []);
+    }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, [liveEmployee.id]);
+  useEffect(() => { void saveWorkspaceRecord('employee_chat', liveEmployee.id, { sent, responses }).catch(() => undefined); }, [liveEmployee.id, sent, responses]);
   const { name, role, department, initials, color, accent, status, active, metric, metricLabel, description, tasks, skills, performance, lastActive } = liveEmployee;
 
   const addChatFiles = (fileList: FileList | null) => {
@@ -975,15 +932,13 @@ function AIWorkspace({ employee }: { employee:Employee }) {
 }
 
 function HRMemoryPanel({ employee }: { employee: Employee }) {
-  const key = `finos:hr-memory:${employee.id}`;
-  const [memory, setMemory] = useState(() => {
-    try { return localStorage.getItem(key) || `Role: ${employee.role}\nDepartment: ${employee.department}\nInterview framework: define role competencies, behavioral evidence, technical evidence, scorecard, and escalation criteria.\nEvaluation style: evidence-based, consistent, human-review required.`; } catch { return ''; }
-  });
+  const [memory, setMemory] = useState(`Role: ${employee.role}\nDepartment: ${employee.department}\nInterview framework: define role competencies, behavioral evidence, technical evidence, scorecard, and escalation criteria.\nEvaluation style: evidence-based, consistent, human-review required.`);
   const [saved, setSaved] = useState(false);
-  const save = () => { localStorage.setItem(key, memory); setSaved(true); toast.success('HR employee memory saved'); setTimeout(() => setSaved(false), 1200); };
+  useEffect(() => { void loadWorkspaceRecords('hr_memory').then((records) => { const record = records.find((item) => item.record_id === employee.id); const value = record?.payload?.memory; if (typeof value === 'string') setMemory(value); }).catch(() => undefined); }, [employee.id]);
+  const save = () => { void saveWorkspaceRecord('hr_memory', employee.id, { memory }).then(() => { setSaved(true); toast.success('HR employee memory saved'); setTimeout(() => setSaved(false), 1200); }).catch(() => toast.error('Unable to save HR employee memory')); };
   if (employee.department !== 'Human resources' && employee.role.toLowerCase() !== 'hr') return <div className="panel p-6"><div className="kicker mb-2">HR only</div><div className="text-sm text-[#9ab0bd]">This memory and interview communication area is available only to the HR employee.</div></div>;
   return <div className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
-    <div className="panel p-5 md:p-6"><div className="kicker mb-1">HR employee memory</div><div className="text-sm font-semibold text-[#deedf1]">Persistent job knowledge & interview rubric</div><p className="mt-2 text-[11px] leading-5 text-[#7892a5]">Store role-specific operating context so HR can evaluate interviews consistently. This is local workspace memory until a server memory service is connected.</p><textarea value={memory} onChange={(event) => setMemory(event.target.value)} className="input-dark mt-4 min-h-[240px] w-full resize-y rounded-lg px-3 py-3 text-xs leading-5" data-testid="textarea-hr-memory"/><button onClick={save} className="btn-primary mt-3 rounded-lg px-4 py-2.5 text-xs" data-testid="button-save-hr-memory">{saved ? 'Saved' : 'Save HR memory'}</button></div>
+    <div className="panel p-5 md:p-6"><div className="kicker mb-1">HR employee memory</div><div className="text-sm font-semibold text-[#deedf1]">Persistent job knowledge & interview rubric</div><p className="mt-2 text-[11px] leading-5 text-[#7892a5]">Store role-specific operating context in the company PostgreSQL workspace.</p><textarea value={memory} onChange={(event) => setMemory(event.target.value)} className="input-dark mt-4 min-h-[240px] w-full resize-y rounded-lg px-3 py-3 text-xs leading-5" data-testid="textarea-hr-memory"/><button onClick={save} className="btn-primary mt-3 rounded-lg px-4 py-2.5 text-xs" data-testid="button-save-hr-memory">{saved ? 'Saved' : 'Save HR memory'}</button></div>
     <div className="panel p-5 md:p-6"><div className="kicker mb-1">Human communication</div><div className="text-sm font-semibold text-[#deedf1]">Visual + audio readiness</div><div className="mt-4 space-y-3"><div className="rounded-lg bg-[#0c1020] p-4"><div className="text-[12px] text-[#dbe8ed]">Camera</div><div className="mt-1 text-[10px] text-[#718b9f]">UI permission hook ready; production video requires WebRTC/provider wiring.</div><button onClick={() => toast.info('Camera permission flow can be connected to the HR video provider')} className="btn-quiet mt-3 rounded-lg px-3 py-2 text-[10px]">Test camera</button></div><div className="rounded-lg bg-[#0c1020] p-4"><div className="text-[12px] text-[#dbe8ed]">Microphone</div><div className="mt-1 text-[10px] text-[#718b9f]">UI permission hook ready; production audio requires browser permission and provider wiring.</div><button onClick={() => toast.info('Microphone permission flow can be connected to the HR voice provider')} className="btn-quiet mt-3 rounded-lg px-3 py-2 text-[10px]">Test microphone</button></div></div></div>
   </div>;
 }
@@ -1051,11 +1006,9 @@ function EmployeePermissionsPanel({ employee }: { employee: Employee }) {
 }
 
 function EmployeeSettingsPanel({ employee, notifications, setNotifications }: { employee: Employee; notifications: boolean; setNotifications: (value: boolean) => void }) {
-  const memoryKey = `finos:employee-memory:${employee.id}`;
-  const [memory, setMemory] = useState(() => {
-    try { return localStorage.getItem(memoryKey) || `${employee.role} operating memory\\nResponsibilities: ${(employee.responsibilities || []).join(', ') || 'Define role-specific responsibilities.'}\\nSkills: ${(employee.skills || []).join(', ') || 'Add role-specific skills.'}\\nEvaluation: use workspace evidence, assigned knowledge, and explicit permissions.`; } catch { return ''; }
-  });
-  const saveMemory = () => { localStorage.setItem(memoryKey, memory); toast.success(`${employee.name} memory saved`); };
+  const [memory, setMemory] = useState(`${employee.role} operating memory\\nResponsibilities: ${(employee.responsibilities || []).join(', ') || 'Define role-specific responsibilities.'}\\nSkills: ${(employee.skills || []).join(', ') || 'Add role-specific skills.'}\\nEvaluation: use workspace evidence, assigned knowledge, and explicit permissions.`);
+  useEffect(() => { void loadWorkspaceRecords('employee_memory').then((records) => { const record = records.find((item) => item.record_id === employee.id); const value = record?.payload?.memory; if (typeof value === 'string') setMemory(value); }).catch(() => undefined); }, [employee.id]);
+  const saveMemory = () => { void saveWorkspaceRecord('employee_memory', employee.id, { memory }).then(() => toast.success(`${employee.name} memory saved`)).catch(() => toast.error('Unable to save employee memory')); };
   return <div className="panel p-5 md:p-6"><div className="kicker mb-1">Settings</div><div className="mb-5 text-sm font-semibold text-[#deedf1]">Operating configuration</div><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-lg bg-[#0c1020] p-4"><div className="kicker">Manager</div><div className="mt-2 text-sm text-[#d4e5eb]">{employee.manager}</div></div><div className="rounded-lg bg-[#0c1020] p-4"><div className="kicker">Personality</div><div className="mt-2 text-sm text-[#d4e5eb]">{employee.personality || 'Thoughtful and clear'}</div></div></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="flex items-center justify-between"><div><div className="text-[12px] font-medium text-[#d3e3e9]">Activity notifications</div><div className="mt-1 text-[11px] text-[#718b9e]">Receive updates when {employee.name} completes work or needs review.</div></div><button onClick={() => { setNotifications(!notifications); toast.info(`Notifications ${notifications ? 'muted' : 'enabled'}`); }} className={`relative h-6 w-11 shrink-0 rounded-full ${notifications ? 'bg-[#3c9fae]' : 'bg-[#263d50]'}`} data-testid="switch-employee-notifications"><span className={`absolute top-1 h-4 w-4 rounded-full bg-[#ecf8f8] ${notifications ? 'left-6' : 'left-1'}`}/></button></div></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#10283a] p-4"><div className="kicker mb-2">System prompt</div><p className="text-[11px] leading-5 text-[#8da5b4]">{employee.systemPrompt || 'This employee follows the workspace operating context and assigned permissions.'}</p></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="kicker mb-2">Persistent employee memory</div><p className="text-[11px] leading-5 text-[#718b9f]">Role-specific memory persists per employee and can be used as the operating context when a real AI backend is connected.</p><textarea value={memory} onChange={(event) => setMemory(event.target.value)} className="input-dark mt-3 min-h-[130px] w-full resize-y rounded-lg px-3 py-2 text-[11px] leading-5" data-testid={`textarea-employee-memory-${employee.id}`}/><button onClick={saveMemory} className="btn-quiet mt-2 rounded-lg px-3 py-2 text-[10px]" data-testid={`button-save-employee-memory-${employee.id}`}>Save employee memory</button></div><div className="mt-4 rounded-lg border border-[#203c50] bg-[#0c1020] p-4"><div className="kicker mb-2">Email actions</div><p className="text-[11px] leading-5 text-[#718b9f]">Employees can be given an email-send permission, but Gmail/Outlook credentials and OAuth tokens must remain server-side.</p><button onClick={() => toast.info('Email connector is UI-ready; connect OAuth on the backend before enabling real sends.')} className="btn-quiet mt-3 rounded-lg px-3 py-2 text-[10px]">Configure secure email connector</button></div></div>;
 }
 
@@ -1199,17 +1152,10 @@ function DataForm({ kind, onClose }: { kind: 'transactions' | 'customers' | 'mer
       if (!values.name || !values.segment) { toast.error('Add a merchant name and segment'); return; }
       if (merchantPassword.length < 8) { toast.error('Merchant password must be at least 8 characters'); return; }
       void hashCredential(merchantPassword).then((passwordHash) => {
-        try {
-          const raw = localStorage.getItem(MERCHANT_CREDENTIALS_KEY);
-          const credentials = raw ? JSON.parse(raw) as Record<string, { passwordHash: string; idDocument?: { name: string; type: string; size: number } }> : {};
-          credentials[values.name.trim().toLowerCase()] = {
-            passwordHash,
-            ...(idDocument ? { idDocument: { name: idDocument.name, type: idDocument.type, size: idDocument.size } } : {}),
-          };
-          localStorage.setItem(MERCHANT_CREDENTIALS_KEY, JSON.stringify(credentials));
-        } catch {
-          toast.error('Unable to save merchant credential verifier');
-        }
+        void saveWorkspaceRecord('merchant_credential', values.name.trim().toLowerCase(), {
+          passwordHash,
+          ...(idDocument ? { idDocument: { name: idDocument.name, type: idDocument.type, size: idDocument.size } } : {}),
+        }).catch(() => toast.error('Unable to save merchant credential verifier'));
       });
       platform.addMerchant({ name: values.name, segment: values.segment, volume: Number(values.volume || 0), growth: Number(values.growth || 0), authRate: Number(values.authRate || 0), health: (values.health || 'Healthy') as MerchantRecord['health'], country: values.country || 'US' });
     }

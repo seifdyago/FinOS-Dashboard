@@ -208,77 +208,202 @@ function normalizeCustomers(records: CustomerRecord[]): CustomerRecord[] {
   }));
 }
 
+type WorkspaceApiRecord = {
+  record_type: string;
+  record_id: string;
+  payload: Record<string, unknown>;
+};
+
+async function workspaceApi(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(path, {
+    ...init,
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.headers || {}),
+    },
+  });
+}
+
+export async function loadWorkspaceRecords(recordType: string): Promise<WorkspaceApiRecord[]> {
+  const response = await workspaceApi(`/api/workspace/data?types=${encodeURIComponent(recordType)}`);
+  if (!response.ok) throw new Error(`Unable to load ${recordType} records`);
+  const payload = await response.json() as { records?: WorkspaceApiRecord[] };
+  return payload.records || [];
+}
+
+export async function saveWorkspaceRecord(recordType: string, recordId: string, payload: object): Promise<void> {
+  const response = await workspaceApi(`/api/workspace/data/${encodeURIComponent(recordType)}/${encodeURIComponent(recordId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ payload }),
+  });
+  if (!response.ok) throw new Error(`Unable to save ${recordType} record`);
+}
+
+async function deleteWorkspaceRecord(recordType: string, recordId: string): Promise<void> {
+  const response = await workspaceApi(`/api/workspace/data/${encodeURIComponent(recordType)}/${encodeURIComponent(recordId)}`, { method: 'DELETE' });
+  if (!response.ok && response.status !== 404) throw new Error(`Unable to delete ${recordType} record`);
+}
+
 const PlatformContext = createContext<PlatformContextValue | null>(null);
 
 export function PlatformProvider({ children }: { children: ReactNode }) {
-  const [tenant, setTenant] = useState<TenantWorkspace>(() => readStored('finos-active-tenant', tenantCatalog[0]));
-  const legacyMigration = false;
-  const [theme, setTheme] = useState<PlatformTheme>(() => readTenantStored(tenant.id, 'theme', 'dark', legacyMigration));
-  const [user, setUser] = useState<WorkspaceUser>(() => readTenantStored(tenant.id, 'user', {
-    name: `${tenant.name} Admin`,
-    email: `admin@${tenant.domain}`,
+  const [tenant, setTenant] = useState<TenantWorkspace>(() => tenantCatalog[0]);
+  const [theme, setTheme] = useState<PlatformTheme>('dark');
+  const [user, setUser] = useState<WorkspaceUser>(() => ({
+    name: `${tenantCatalog[0].name} Admin`,
+    email: `admin@${tenantCatalog[0].domain}`,
     avatar: '',
     role: 'Workspace admin',
     platform_admin_role: null,
-    initials: `${tenant.initials}A`,
+    initials: `${tenantCatalog[0].initials}A`,
     title: 'Chief Operating Officer',
     timezone: 'Pacific Time (US & Canada)',
-  }, legacyMigration));
-  const [preferences, setPreferences] = useState(() => readTenantStored(tenant.id, 'preferences', { ...initialPreferences, workspaceName: tenant.name, operatingContext: `${tenant.name} is a global payments platform serving thoughtful commerce brands.` }, legacyMigration));
-  const [notifications, setNotifications] = useState<PlatformNotification[]>(() => readTenantStored(tenant.id, 'notifications', [] as PlatformNotification[], legacyMigration));
-  const [transactions, setTransactions] = useState<TransactionRecord[]>(() => readTenantStored(tenant.id, 'transactions', [] as TransactionRecord[], legacyMigration));
-  const [customers, setCustomers] = useState<CustomerRecord[]>(() => normalizeCustomers(readTenantStored(tenant.id, 'customers', [] as CustomerRecord[], legacyMigration)));
-  const [merchants, setMerchants] = useState<MerchantRecord[]>(() => readTenantStored(tenant.id, 'merchants', [] as MerchantRecord[], legacyMigration));
-  const [reports, setReports] = useState<ReportRecord[]>(() => readTenantStored(tenant.id, 'reports', [] as ReportRecord[], legacyMigration));
+  }));
+  const [preferences, setPreferences] = useState<WorkspacePreferences>({ ...initialPreferences });
+  const [notifications, setNotifications] = useState<PlatformNotification[]>([]);
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [merchants, setMerchants] = useState<MerchantRecord[]>([]);
+  const [reports, setReports] = useState<ReportRecord[]>([]);
 
   useEffect(() => {
-    localStorage.setItem(tenantKey(tenant.id, 'theme'), JSON.stringify(theme));
     document.documentElement.classList.toggle('theme-light', theme === 'light');
-  }, [theme, tenant.id]);
-  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'user'), JSON.stringify(user)), [user, tenant.id]);
-  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'preferences'), JSON.stringify(preferences)), [preferences, tenant.id]);
-  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'notifications'), JSON.stringify(notifications)), [notifications, tenant.id]);
-  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'transactions'), JSON.stringify(transactions)), [transactions, tenant.id]);
-  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'customers'), JSON.stringify(customers)), [customers, tenant.id]);
-  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'merchants'), JSON.stringify(merchants)), [merchants, tenant.id]);
-  useEffect(() => localStorage.setItem(tenantKey(tenant.id, 'reports'), JSON.stringify(reports)), [reports, tenant.id]);
-  useEffect(() => localStorage.setItem('finos-active-tenant', JSON.stringify(tenant)), [tenant]);
+  }, [theme]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadWorkspaceData = async () => {
+      const response = await workspaceApi('/api/workspace/data?types=preferences,notifications,transactions,customers,merchants,reports');
+      if (!response.ok) throw new Error('Unable to load workspace data');
+      const payload = await response.json() as { records?: WorkspaceApiRecord[] };
+      const records = payload.records || [];
+      const byType = (type: string) => records.filter((record) => record.record_type === type);
+      const preference = byType('preferences')[0]?.payload;
+      if (!mounted) return;
+      if (preference) {
+        setPreferences((current) => ({ ...current, ...(preference.preferences as Partial<WorkspacePreferences> || {}) }));
+        if (preference.theme === 'light' || preference.theme === 'dark') setTheme(preference.theme);
+      }
+      setNotifications(byType('notifications').map((record) => record.payload as unknown as PlatformNotification));
+      setTransactions(byType('transactions').map((record) => record.payload as unknown as TransactionRecord));
+      setCustomers(normalizeCustomers(byType('customers').map((record) => record.payload as unknown as CustomerRecord)));
+      setMerchants(byType('merchants').map((record) => record.payload as unknown as MerchantRecord));
+      setReports(byType('reports').map((record) => record.payload as unknown as ReportRecord));
+
+      const migrate = async (type: string, value: unknown) => {
+        if (type === 'preferences') await saveWorkspaceRecord(type, 'workspace', { preferences: value, theme });
+        else if (Array.isArray(value)) await Promise.all(value.map((item) => saveWorkspaceRecord(type, String((item as { id?: string }).id || crypto.randomUUID()), item as object)));
+      };
+      for (const type of ['preferences', 'notifications', 'transactions', 'customers', 'merchants', 'reports']) {
+        const key = tenantKey(tenant.id, type);
+        const raw = localStorage.getItem(key);
+        if (!raw || byType(type).length) continue;
+        try {
+          const value = JSON.parse(raw);
+          if (type === 'preferences' && value && typeof value === 'object') setPreferences((current) => ({ ...current, ...(value as Partial<WorkspacePreferences>) }));
+          if (type === 'notifications' && Array.isArray(value)) setNotifications(value as PlatformNotification[]);
+          if (type === 'transactions' && Array.isArray(value)) setTransactions(value as TransactionRecord[]);
+          if (type === 'customers' && Array.isArray(value)) setCustomers(normalizeCustomers(value as CustomerRecord[]));
+          if (type === 'merchants' && Array.isArray(value)) setMerchants(value as MerchantRecord[]);
+          if (type === 'reports' && Array.isArray(value)) setReports(value as ReportRecord[]);
+          await migrate(type, value);
+          localStorage.removeItem(key);
+        } catch {
+          // PostgreSQL remains the source of truth when legacy data is malformed.
+        }
+      }
+    };
+    void loadWorkspaceData().catch(() => undefined);
+    return () => { mounted = false; };
+  }, [tenant.id]);
 
   const value = useMemo<PlatformContextValue>(() => ({
     tenant,
     availableTenants: tenantCatalog,
     switchTenant: (tenantId) => {
       const next = tenantCatalog.find((candidate) => candidate.id === tenantId);
-      if (next && next.id !== tenant.id) {
-        localStorage.setItem('finos-active-tenant', JSON.stringify(next));
-        window.location.reload();
-      }
+      if (next && next.id !== tenant.id) setTenant(next);
     },
     theme,
-    toggleTheme: () => setTheme((current) => current === 'dark' ? 'light' : 'dark'),
+    toggleTheme: () => setTheme((current) => {
+      const next = current === 'dark' ? 'light' : 'dark';
+      void saveWorkspaceRecord('preferences', 'workspace', { preferences, theme: next }).catch(() => undefined);
+      return next;
+    }),
     user,
-    updateUser: (patch) => setUser((current) => ({ ...current, ...patch })),
     preferences,
-    updatePreferences: (patch) => setPreferences((current) => ({ ...current, ...patch })),
+    updateUser: (patch) => setUser((current) => ({ ...current, ...patch })),
+    updatePreferences: (patch) => setPreferences((current) => {
+      const next = { ...current, ...patch };
+      void saveWorkspaceRecord('preferences', 'workspace', { preferences: next, theme }).catch(() => undefined);
+      return next;
+    }),
     notifications,
     unreadNotifications: notifications.filter((notification) => !notification.read).length,
-    markNotificationRead: (id) => setNotifications((current) => current.map((notification) => notification.id === id ? { ...notification, read: true } : notification)),
-    markAllNotificationsRead: () => setNotifications((current) => current.map((notification) => ({ ...notification, read: true }))),
+    markNotificationRead: (id) => setNotifications((current) => current.map((notification) => {
+      if (notification.id !== id) return notification;
+      const next = { ...notification, read: true };
+      void saveWorkspaceRecord('notifications', next.id, next).catch(() => undefined);
+      return next;
+    })),
+    markAllNotificationsRead: () => setNotifications((current) => current.map((notification) => {
+      const next = { ...notification, read: true };
+      void saveWorkspaceRecord('notifications', next.id, next).catch(() => undefined);
+      return next;
+    })),
     transactions,
     customers,
     merchants,
     reports,
-    addTransaction: (record) => setTransactions((current) => [{ ...record, id: `TX-${84922 + current.length}`, time: 'Just now' }, ...current]),
-    deleteTransaction: (id) => setTransactions((current) => current.filter((transaction) => transaction.id !== id)),
-    updateTransactionStatus: (id, status) => setTransactions((current) => current.map((transaction) => transaction.id === id ? { ...transaction, status } : transaction)),
-    addCustomer: (record) => setCustomers((current) => [{ ...record, id: `C-${1285 + current.length}`, lastActive: 'Just now', notes: [], activity: [{ label: 'Customer added to workspace', time: 'Just now' }] }, ...current]),
-    updateCustomerHealth: (id, health) => setCustomers((current) => current.map((customer) => customer.id === id ? { ...customer, health } : customer)),
-    updateCustomerNotes: (id, notes) => setCustomers((current) => current.map((customer) => customer.id === id ? { ...customer, notes } : customer)),
-    addMerchant: (record) => setMerchants((current) => [{ ...record, id: `M-${1043 + current.length}` }, ...current]),
-    deleteMerchant: (id) => setMerchants((current) => current.filter((merchant) => merchant.id !== id)),
-    updateMerchantHealth: (id, health) => setMerchants((current) => current.map((merchant) => merchant.id === id ? { ...merchant, health } : merchant)),
-    addReport: (record) => setReports((current) => [{ ...record, id: `R-${304 + current.length}`, date: 'Just now', status: 'Ready' }, ...current]),
-    deleteReport: (id) => setReports((current) => current.filter((report) => report.id !== id)),
+    addTransaction: (record) => setTransactions((current) => {
+      const next = { ...record, id: `TX-${Date.now()}`, time: 'Just now' };
+      void saveWorkspaceRecord('transactions', next.id, next).catch(() => undefined);
+      return [next, ...current];
+    }),
+    deleteTransaction: (id) => { void deleteWorkspaceRecord('transactions', id).catch(() => undefined); setTransactions((current) => current.filter((transaction) => transaction.id !== id)); },
+    updateTransactionStatus: (id, status) => setTransactions((current) => current.map((transaction) => {
+      if (transaction.id !== id) return transaction;
+      const next = { ...transaction, status };
+      void saveWorkspaceRecord('transactions', id, next).catch(() => undefined);
+      return next;
+    })),
+    addCustomer: (record) => setCustomers((current) => {
+      const next = { ...record, id: `C-${Date.now()}`, lastActive: 'Just now', notes: record.notes || [], activity: record.activity || [{ label: 'Customer added to workspace', time: 'Just now' }] };
+      void saveWorkspaceRecord('customers', next.id, next).catch(() => undefined);
+      return [next, ...current];
+    }),
+    updateCustomerHealth: (id, health) => setCustomers((current) => current.map((customer) => {
+      if (customer.id !== id) return customer;
+      const next = { ...customer, health };
+      void saveWorkspaceRecord('customers', id, next).catch(() => undefined);
+      return next;
+    })),
+    updateCustomerNotes: (id, notes) => setCustomers((current) => current.map((customer) => {
+      if (customer.id !== id) return customer;
+      const next = { ...customer, notes };
+      void saveWorkspaceRecord('customers', id, next).catch(() => undefined);
+      return next;
+    })),
+    addMerchant: (record) => setMerchants((current) => {
+      const next = { ...record, id: `M-${Date.now()}` };
+      void saveWorkspaceRecord('merchants', next.id, next).catch(() => undefined);
+      return [next, ...current];
+    }),
+    deleteMerchant: (id) => { void deleteWorkspaceRecord('merchants', id).catch(() => undefined); setMerchants((current) => current.filter((merchant) => merchant.id !== id)); },
+    updateMerchantHealth: (id, health) => setMerchants((current) => current.map((merchant) => {
+      if (merchant.id !== id) return merchant;
+      const next = { ...merchant, health };
+      void saveWorkspaceRecord('merchants', id, next).catch(() => undefined);
+      return next;
+    })),
+    addReport: (record) => setReports((current) => {
+      const next = { ...record, id: `R-${Date.now()}`, date: 'Just now', status: 'Ready' as const };
+      void saveWorkspaceRecord('reports', next.id, next).catch(() => undefined);
+      return [next, ...current];
+    }),
+    deleteReport: (id) => { void deleteWorkspaceRecord('reports', id).catch(() => undefined); setReports((current) => current.filter((report) => report.id !== id)); },
   }), [tenant, theme, user, preferences, notifications, transactions, customers, merchants, reports]);
 
   return <PlatformContext.Provider value={value}>{children}</PlatformContext.Provider>;

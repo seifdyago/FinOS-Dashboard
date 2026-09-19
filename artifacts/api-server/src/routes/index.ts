@@ -9,6 +9,7 @@ import activityRouter from "./activity";
 import ownerBootstrapRouter from "./owner-bootstrap";
 import employeesRouter from "./employees";
 import integrationEventsRouter from "./integration-events";
+import workspaceDataRouter from "./workspace-data";
 
 const router: IRouter = Router();
 
@@ -21,5 +22,6 @@ router.use(knowledgeFilesRouter);
 router.use(platformAdminRouter);
 router.use(activityRouter);
 router.use(ownerBootstrapRouter);
+router.use(workspaceDataRouter);
 
 export default router;

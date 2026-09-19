@@ -12,4 +12,5 @@ export * from "./account-applications.js";
 export * from "./auth-sessions.js";
 export * from "./password-reset-tokens.js";
 export * from "./password-reset-rate-limits.js";
+export * from "./workspace-records.js";
 export * from "./relations.js";
