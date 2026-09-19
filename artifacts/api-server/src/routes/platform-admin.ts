@@ -27,6 +27,7 @@ import {
 import { AUTH_SESSION_COOKIE, getAuthenticatedUser, revokeAllUserSessions } from "../lib/auth-session";
 import { getPlatformAnalytics } from "../lib/platform-analytics-service";
 import { privateObjectStorage } from "../lib/private-object-storage";
+import { ensurePaymentDepositsTable } from "../lib/payment-deposits-migration";
 
 const router: IRouter = Router();
 
@@ -34,6 +35,7 @@ const PREMIUM_PRICE_CENTS = 200_000;
 
 router.get("/platform-admin/payment-deposits", async (req, res): Promise<void> => {
   try {
+    await ensurePaymentDepositsTable();
     await requirePlatformAdminRequestContext(req);
     const rows = await db.select().from(paymentDeposits).orderBy(paymentDeposits.submittedAt);
     const deposits = await Promise.all(rows.map(async (deposit) => ({
@@ -59,6 +61,7 @@ router.post("/platform-admin/payment-deposits/:depositId/decision", async (req, 
   const decision = req.body?.decision === "approved" ? "approved" : req.body?.decision === "rejected" ? "rejected" : null;
   if (!decision) { res.status(400).json({ error: "A valid deposit decision is required." }); return; }
   try {
+    await ensurePaymentDepositsTable();
     const admin = await requirePlatformAdminRequestContext(req);
     const reviewerEmail = req.header("x-finos-platform-admin-email")!.trim().toLowerCase();
     const [reviewer] = await db.select({ id: users.id }).from(users).where(eq(users.email, reviewerEmail)).limit(1);

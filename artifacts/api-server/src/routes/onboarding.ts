@@ -20,6 +20,7 @@ import {
   RequestOnboardingDocumentUploadUrlBody,
   RequestOnboardingDocumentUploadUrlResponse,
 } from "@workspace/api-zod";
+import { ensurePaymentDepositsTable } from "../lib/payment-deposits-migration";
 
 const router: IRouter = Router();
 
@@ -56,6 +57,7 @@ router.post(
 router.post(
   "/onboarding/companies",
   async (req, res): Promise<void> => {
+    await ensurePaymentDepositsTable();
     const parsed =
       CreateCompanyOnboardingBody.safeParse(req.body);
 
