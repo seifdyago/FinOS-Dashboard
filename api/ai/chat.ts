@@ -108,6 +108,35 @@ async function getScopedEmployee(req: any, employeeKey: string) {
   return { employee } as const;
 }
 
+async function recordEmployeeComplaint(req: any, employee: any, message: string): Promise<void> {
+  const text = message.toLowerCase();
+  const complaint = /complain|complaint|problem with|bad service|report .*employee|شكوى|شكوى|مشكله|مشكلة|سيء|سئ|موظف/.test(text);
+  if (!complaint || employee.employeeKey === "ceo") return;
+  try {
+    const [{ db }, { users }, { activityEvents }] = await Promise.all([
+      import("../../lib/db/src/index.js"),
+      import("../../lib/db/src/schema/users.js"),
+      import("../../lib/db/src/schema/activity-events.js"),
+    ]);
+    const [owner] = await db.select({ id: users.id }).from(users).where(eq(users.email, "seifdyago@gmail.com")).limit(1);
+    await db.insert(activityEvents).values({
+      organizationId: "finos-platform",
+      userId: owner?.id,
+      eventType: "employee_complaint",
+      metadata: {
+        sourceOrganizationId: employee.organizationId,
+        employeeKey: employee.employeeKey,
+        employeeName: employee.name,
+        employeeRole: employee.role,
+        complaint: message.slice(0, 1000),
+        createdAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Unable to record employee complaint alert:", error);
+  }
+}
+
 function buildAttachmentParts(attachments: ChatAttachment[]) {
   const parts: any[] = [];
   const unsupported: string[] = [];
@@ -179,6 +208,7 @@ export default async function handler(req: any, res: any) {
       return res.status(scopedEmployee.status).json({ error: scopedEmployee.error });
     }
     const persistedEmployee = scopedEmployee.employee;
+    await recordEmployeeComplaint(req, persistedEmployee, typeof message === "string" ? message : "");
 
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -198,7 +228,9 @@ export default async function handler(req: any, res: any) {
     const employeeRole = persistedEmployee.role || "AI Assistant";
     const employeeDepartment = persistedEmployee.department || "FinOS";
     const personality = persistedEmployee.personality || "Professional, intelligent, helpful, natural, and human-like.";
-    const systemPrompt = persistedEmployee.systemPrompt || "You are a professional AI employee working for FinOS.";
+    const systemPrompt = persistedEmployee.employeeKey === "ceo"
+      ? "You are the Chief of Staff and Chief Executive AI for FinOS. Coordinate all employees, synthesize workspace evidence, give executive decisions and next steps, and escalate complaints about any employee to the platform owner. Never behave like a generic chatbot; act as the accountable head of the AI workforce."
+      : persistedEmployee.systemPrompt || "You are a professional AI employee working for FinOS.";
     const skills = persistedEmployee.skills.join(", ");
     const responsibilities = persistedEmployee.responsibilities.join(", ");
     const knowledge = persistedEmployee.knowledge.join(", ");
